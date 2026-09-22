@@ -1,6 +1,8 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { chromium } from "playwright";
 import { z } from "zod";
 import { runAgent } from "./agent.js";
 import type { ClientConfig } from "./config.js";
@@ -193,13 +195,31 @@ export interface RunReport {
 
 const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
-export async function writeReports(runDir: string, report: RunReport): Promise<void> {
+async function renderPdf(htmlPath: string, pdfPath: string): Promise<void> {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    await page.goto(pathToFileURL(htmlPath).href, { waitUntil: "networkidle" });
+    await page.pdf({
+      path: pdfPath,
+      format: "A4",
+      printBackground: true,
+      margin: { top: "16mm", bottom: "16mm", left: "12mm", right: "12mm" },
+    });
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function writeReports(runDir: string, report: RunReport, log?: Logger): Promise<void> {
   await writeFile(
     path.join(runDir, "report.json"),
     JSON.stringify({ ...report, cfg: { name: report.cfg.name, baseUrl: report.cfg.baseUrl } }, null, 2),
   );
   await writeFile(path.join(runDir, "report.md"), toMarkdown(report));
-  await writeFile(path.join(runDir, "report.html"), toHtml(report));
+  const htmlPath = path.join(runDir, "report.html");
+  await writeFile(htmlPath, toHtml(report));
+  await renderPdf(htmlPath, path.join(runDir, "report.pdf")).catch((err) => log?.(`report.pdf skipped: ${errMsg(err)}`));
 
   const header = ["ID", "Title", "Severity", "Category", "Needs verification", "URL", "Steps", "Expected", "Actual", "Charter", "Screenshots"];
   const rows = report.issues.map((issue) =>

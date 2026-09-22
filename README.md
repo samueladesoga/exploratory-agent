@@ -3,7 +3,7 @@
 A reusable harness that uses Claude to run session-based exploratory testing against any web application. Point it at a client's site with a small YAML file and it will map the app, write a test plan, run time-boxed exploration sessions in a real browser, and produce a triaged bug report.
 
 ```
-recon ──► plan ──► sessions (Claude drives Chromium) ──► triage ──► report.html / .md / .csv / .json
+recon ──► plan ──► sessions (Claude drives Chromium) ──► triage ──► report.html / .pdf / .md / .csv / .json
 ```
 
 ## Setup
@@ -36,6 +36,7 @@ Each run writes to `runs/<client>/<timestamp>/`:
 | File | What it is |
 |---|---|
 | `report.html` | Client-ready report with screenshots, severity counts and coverage |
+| `report.pdf` | Same report, printable/shareable as a PDF |
 | `report.md` | Same content in Markdown |
 | `issues.csv` | One row per issue, ready to import into Jira, Azure DevOps or Linear |
 | `report.json` | Everything, machine-readable |

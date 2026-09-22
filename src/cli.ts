@@ -100,17 +100,21 @@ async function main(): Promise<void> {
     const triaged = await triage(cfg, sessions, autos, { cwd: runDir, log });
     totalCostUsd += triaged.costUsd;
 
-    await writeReports(runDir, {
-      cfg,
-      plan,
-      sessions,
-      issues: triaged.issues,
-      autos,
-      summary: triaged.summary,
-      totalCostUsd,
-      startedAt,
-      endedAt: new Date().toISOString(),
-    });
+    await writeReports(
+      runDir,
+      {
+        cfg,
+        plan,
+        sessions,
+        issues: triaged.issues,
+        autos,
+        summary: triaged.summary,
+        totalCostUsd,
+        startedAt,
+        endedAt: new Date().toISOString(),
+      },
+      log,
+    );
 
     const issueCountBySeverity = triaged.issues.reduce<Record<string, number>>((counts, issue) => {
       const key = issue.needsVerification ? "to verify" : issue.severity;
