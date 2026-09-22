@@ -1,0 +1,41 @@
+# Demo client: Sauce Labs' public practice shop (a React app).
+# The "problem_user" account is deliberately buggy, which makes it a good first run.
+name: Sauce Demo
+baseUrl: https://www.saucedemo.com/inventory.html
+description: |
+  A demo e-commerce store. Users browse a product inventory, sort products,
+  view product details, add and remove items from the cart, and check out in
+  three steps: customer information (first name, last name, postal code),
+  an order overview with item total, tax and total, and a confirmation page.
+  Prices must be consistent between the inventory, product detail, cart and
+  checkout overview, and the total must equal item total plus tax.
+
+focusAreas:
+  - Product sorting and product detail pages (images, names, prices consistent)
+  - Cart contents and badge count
+  - Checkout form validation and order total calculation
+
+outOfScope:
+  - The "Logout" and "Reset App State" items in the side menu
+  - External links (Twitter, Facebook, LinkedIn)
+
+testData:
+  customer: first name Test, last name Tester, postal code SW1A 1AA
+
+auth:
+  type: form
+  loginUrl: https://www.saucedemo.com/
+  usernameSelector: css=#user-name
+  passwordSelector: css=#password
+  submitSelector: css=#login-button
+  usernameEnv: SAUCE_USERNAME
+  passwordEnv: SAUCE_PASSWORD
+  successSelector: css=.inventory_list
+
+safety:
+  ignoreSignals:
+    - "backtrace\\.io|events\\.backtrace"
+
+run:
+  sessions: 3
+  maxStepsPerSession: 40

@@ -1,0 +1,70 @@
+# Copy this file to clients/<client-name>.yaml and fill it in.
+# Only name, baseUrl and description are required; everything else has sensible defaults.
+
+name: Acme Portal
+baseUrl: https://staging.acme.example.com/   # ALWAYS a test/staging environment, never production
+description: |
+  What the application is and who uses it, in a few sentences. The planner and
+  testers rely on this heavily, so include the main user journeys, business rules
+  worth checking (e.g. "orders over £500 need approval"), and user roles.
+
+focusAreas:                      # What the client most wants tested (planned first)
+  - Checkout and payment step (use the test card only)
+  - Account settings and password change
+
+outOfScope:                      # The agent will not test these
+  - Deleting the account
+  - Anything under /admin
+
+knownIssues:                     # Already reported; the agent won't report them again
+  - Footer links point to the old marketing site
+
+testData:                        # Non-secret hints. Secrets go in .env, never here.
+  test card: 4242 4242 4242 4242, any future expiry, CVC 123
+  valid promo code: TEST10
+
+seedPaths:                       # Extra starting points for SPAs whose navigation isn't plain <a> links
+  - /dashboard
+  - /settings/profile
+
+allowedOrigins: []               # Extra origins the agent may navigate to, e.g. https://auth.acme.example.com
+
+auth:
+  type: none                     # none | form | storageState
+  # --- form: harness logs in once itself; credentials come from env vars ---
+  # type: form
+  # loginUrl: https://staging.acme.example.com/login
+  # usernameSelector: css=#email
+  # passwordSelector: css=#password
+  # submitSelector: role=button[name="Sign in"]
+  # usernameEnv: ACME_USERNAME
+  # passwordEnv: ACME_PASSWORD
+  # successSelector: css=[data-testid="user-menu"]
+  # --- storageState: for SSO/MFA logins you complete by hand once ---
+  # type: storageState
+  # path: clients/acme.auth.json   # create with: npx playwright codegen --save-storage=clients/acme.auth.json <url>
+
+safety:
+  blockMutations: false          # true = abort POST/PUT/PATCH/DELETE (read-only exploration of shared envs)
+  blockedRequests:               # regexes; logout is blocked by default so the shared login survives
+    - urlPattern: "log-?out|sign-?out"
+    # - method: DELETE
+    #   urlPattern: "/api/"
+  ignoreSignals:                 # regexes for known runtime noise (third-party scripts etc.)
+    - "googletagmanager|hotjar|intercom"
+
+run:
+  sessions: 5                    # number of charters to plan
+  maxStepsPerSession: 60         # browser actions per session (hard limit)
+  maxMinutesPerSession: 20
+  # maxBudgetUsdPerSession: 3    # stop a session when its estimated cost reaches this
+  concurrency: 1                 # parallel sessions (use 2-3 with headless browsers)
+  plannerModel: opus             # used for planning and triage
+  explorerModel: sonnet          # used for the exploration sessions
+  reconMaxPages: 15
+
+browser:
+  headless: true
+  viewport: { width: 1366, height: 900 }
+  ignoreHttpsErrors: false       # true for staging sites with self-signed certs
+  acceptDialogs: false           # confirm() dialogs are dismissed so destructive actions can't be confirmed
