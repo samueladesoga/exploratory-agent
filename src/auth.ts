@@ -125,7 +125,10 @@ export async function prepareAuth(cfg: ClientConfig, runDir: string, headless: b
       await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
     }
     const file = path.join(runDir, "session.auth.json");
-    await context.storageState({ path: file });
+    // indexedDB matters here: apps that keep their auth session in IndexedDB (e.g. Firebase
+    // Auth) would otherwise log in successfully but produce a storage state that silently
+    // fails to authenticate every session that reuses it.
+    await context.storageState({ path: file, indexedDB: true });
     log("Login succeeded; sessions will start authenticated.");
     return { storageState: file, temporary: true };
   } finally {
