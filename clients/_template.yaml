@@ -34,11 +34,14 @@ auth:
   # --- form: harness logs in once itself; credentials come from env vars ---
   # type: form
   # loginUrl: https://staging.acme.example.com/login
+  # usernameEnv: ACME_USERNAME
+  # passwordEnv: ACME_PASSWORD
+  # The three lines below are optional — the harness auto-detects the username,
+  # password and submit fields on the login page. Only set these if detection
+  # fails (unusual login UI) or you want to pin it to a specific element:
   # usernameSelector: css=#email
   # passwordSelector: css=#password
   # submitSelector: role=button[name="Sign in"]
-  # usernameEnv: ACME_USERNAME
-  # passwordEnv: ACME_PASSWORD
   # successSelector: css=[data-testid="user-menu"]
   # --- storageState: for SSO/MFA logins you complete by hand once ---
   # type: storageState

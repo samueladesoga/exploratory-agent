@@ -7,9 +7,9 @@ const AuthSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("form"),
     loginUrl: z.url(),
-    usernameSelector: z.string(),
-    passwordSelector: z.string(),
-    submitSelector: z.string(),
+    usernameSelector: z.string().optional(),
+    passwordSelector: z.string().optional(),
+    submitSelector: z.string().optional(),
     usernameEnv: z.string(),
     passwordEnv: z.string(),
     successSelector: z.string().optional(),

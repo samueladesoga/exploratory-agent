@@ -50,7 +50,7 @@ Copy `clients/_template.yaml` to `clients/<client>.yaml`. Only `name`, `baseUrl`
 
 Login options:
 
-- **`form`**: the harness logs in itself before any session, using credentials from environment variables named in the config. Credentials never appear in prompts, so Claude never sees them.
+- **`form`**: the harness logs in itself before any session, using credentials from environment variables named in the config. Credentials never appear in prompts, so Claude never sees them. The username, password and submit-button selectors are optional — the harness auto-detects them on the login page (password field, then an email/username-shaped field, then the submit control). Set `usernameSelector`/`passwordSelector`/`submitSelector` explicitly only if auto-detection fails or you want to pin it to a specific element.
 - **`storageState`**: for SSO, MFA or CAPTCHA logins. Log in by hand once with `npx playwright codegen --save-storage=clients/acme.auth.json <url>` and point the config at that file. Cookies expire, so regenerate when sessions start landing on the login page. Apps that keep auth tokens only in `sessionStorage` won't carry over; use `form` login for those.
 
 ## How it works
