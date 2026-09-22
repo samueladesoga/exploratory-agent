@@ -224,8 +224,11 @@ export class BrowserHarness {
     return new URL(url, base).toString();
   }
 
+  // Deliberately no .first() here: Playwright's default strict mode throws when a selector
+  // matches more than one element, which surfaces ambiguous selectors as a tool failure the
+  // agent can react to, instead of silently acting on the wrong (but matching) element.
   private locate(target: string) {
-    return this.page.locator(target).first();
+    return this.page.locator(target);
   }
 
   async settle(): Promise<void> {
