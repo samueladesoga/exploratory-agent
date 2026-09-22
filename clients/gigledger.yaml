@@ -1,0 +1,36 @@
+name: Gigledger
+baseUrl: https://staging.gigledger.co.uk/
+description: |
+  An application that users can use to submit timesheets, get those timesheets approved, generate invoices and send invoices to clients. Users can also submit their off days
+  and it is expected that these days should not appear in the timesheet as days worked. There are certain values that must be submitted when creating a contract such as bank details and a users
+  should not be able to create an invoice without the bank details.
+
+focusAreas:
+  - Check that user can create a new contract
+  - User can submit timesheets
+  - User can generate invoices
+  - User can submit offdays and check that they do not appear in the timesheet as days worked
+
+outOfScope:
+  - Logout
+  - Emails domain settings
+testData:
+  customer: first name Test, last name Tester, postal code SW1A 1AA
+
+auth:
+  type: form
+  loginUrl: https://staging.gigledger.co.uk/sign-in
+  usernameSelector: css=input[data-testid=emailAddress]
+  passwordSelector: css=input[data-testid=password]
+  submitSelector: css=button[data-testid=sign-in-button]
+  usernameEnv: GIGLEDGER_USERNAME
+  passwordEnv: GIGLEDGER_PASSWORD
+  successSelector:  css=button[data-testid=contract-timesheets-btn]
+
+safety:
+  ignoreSignals:
+    - "backtrace\\.io|events\\.backtrace"
+
+run:
+  sessions: 3
+  maxStepsPerSession: 40
