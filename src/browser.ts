@@ -1,4 +1,4 @@
-import { chromium, type Browser, type BrowserContext, type Page, type Request, type Route } from "playwright";
+import { chromium, errors, type Browser, type BrowserContext, type Locator, type Page, type Request, type Route } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { appOrigins, type ClientConfig } from "./config.js";
@@ -7,6 +7,18 @@ import { firstLines, slug, stripQuery, truncate } from "./util.js";
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const PASSTHROUGH_PROTOCOLS = new Set(["about:", "data:", "blob:", "javascript:"]);
+
+const ACTIONABILITY_PROBLEM = /intercepts pointer events|not visible|not enabled|not stable|outside of the viewport|not editable|detached/i;
+
+// Playwright buries the reason an element wasn't actionable deep in its call log; pull out the most recent one.
+function actionabilityReason(message: string): string | undefined {
+  const lines = message
+    .replace(/\x1b\[[0-9;]*m/g, "")
+    .split("\n")
+    .map((line) => line.replace(/^\s*-\s*/, "").trim());
+  const reason = lines.reverse().find((line) => ACTIONABILITY_PROBLEM.test(line));
+  return reason ? truncate(reason, 200) : undefined;
+}
 
 export interface HarnessOptions {
   screensDir: string;
@@ -252,9 +264,50 @@ export class BrowserHarness {
     await this.settle();
   }
 
+  // Playwright refuses to click when its actionability checks fail (covered by another element,
+  // still animating, partly off-screen), even though a real user clicking that spot would succeed —
+  // common with custom dropdowns and date pickers. After a short normal attempt, fall back to a real
+  // mouse click at the element's on-screen centre, and tell the agent what happened so it can judge
+  // whether the obstruction is itself a defect.
   async click(target: string): Promise<void> {
-    await this.locate(target).click();
+    const locator = this.locate(target);
+    await locator.waitFor({ state: "attached" });
+    try {
+      await locator.click({ timeout: Math.min(this.cfg.browser.actionTimeoutMs, 3000) });
+    } catch (err) {
+      if (!(err instanceof errors.TimeoutError)) throw err;
+      await this.clickAtCentre(target, locator, actionabilityReason(err.message));
+    }
     await this.settle();
+  }
+
+  private async clickAtCentre(target: string, locator: Locator, reason: string | undefined): Promise<void> {
+    const why = reason ? ` (${reason})` : "";
+    if (await locator.isDisabled().catch(() => false)) throw new Error(`${target} is disabled${why}`);
+    await locator.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
+    const box = await locator.boundingBox();
+    const viewport = this.page.viewportSize();
+    if (!box || box.width === 0 || box.height === 0) throw new Error(`${target} is not visible${why}`);
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    if (viewport && (x < 0 || y < 0 || x > viewport.width || y > viewport.height)) {
+      throw new Error(`${target} is outside the visible viewport and could not be scrolled into view${why}`);
+    }
+    const hit = await locator
+      .evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        if (!top || el === top || el.contains(top) || top.contains(el)) return "";
+        const cls = typeof top.className === "string" && top.className ? `.${top.className.trim().split(/\s+/).slice(0, 3).join(".")}` : "";
+        return `<${top.tagName.toLowerCase()}${cls}>`;
+      })
+      .catch(() => "");
+    await this.page.mouse.click(x, y);
+    this.pendingNotes.push(
+      `Standard click on ${target} was not actionable${why}; clicked its on-screen position with the mouse instead` +
+        (hit ? `, where the topmost element is ${hit}, so the click may have landed on that instead.` : ".") +
+        " Check the snapshot to confirm it took effect.",
+    );
   }
 
   async fill(target: string, value: string): Promise<void> {
