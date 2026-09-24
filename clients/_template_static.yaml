@@ -1,0 +1,22 @@
+name: Sample Static website
+baseUrl: https://www.xxxxxxxxxx.co/
+description: |
+  What the application is and who uses it, in a few sentences. The planner and
+  testers rely on this heavily, so include the main user journeys, business rules
+  worth checking (e.g. "orders over £500 need approval"), and user roles.
+
+focusAreas:
+  - Check user can navigate around the website
+  - Check that the different pages load correctly
+  - Check that users can track their projects
+
+outOfScope:
+  - Logout
+
+safety:
+  ignoreSignals:
+    - "backtrace\\.io|events\\.backtrace"
+
+run:
+  sessions: 3
+  maxStepsPerSession: 20
