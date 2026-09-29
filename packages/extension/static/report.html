@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Report</title>
+    <style>
+      :root { --bg: #f7f7f5; --ink: #1d1d1f; --line: #e3e3e0; --card: #fff; --accent: #5b3fd6; --accent-ink: #fff; color-scheme: light; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #18181a; --ink: #f2f2f2; --line: #38383c; --card: #232326; --accent: #9d8cff; --accent-ink: #141414; color-scheme: dark; }
+      }
+      html, body { height: 100%; margin: 0; }
+      body { background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      #app { display: flex; flex-direction: column; height: 100%; }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--card); }
+      .spacer { flex: 1; }
+      button { font: inherit; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+      button.accent { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+      button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+      iframe { flex: 1; border: 0; width: 100%; background: #f7f7f5; }
+    </style>
+  </head>
+  <body>
+    <div id="app"><p style="padding: 16px">Loading report…</p></div>
+    <script type="module" src="report.js"></script>
+  </body>
+</html>
