@@ -57,6 +57,7 @@ test("drives saucedemo: refs, typing, clicks, selects, guardrails and signals", 
       snap = await driver.snapshot(20000);
       out.hasProducts = /Products/.test(snap);
       await driver.click(refFor(snap, /button "Add to cart"/));
+      out.clickNotes = driver.drainNew();
       snap = await driver.snapshot(20000);
       out.cartSnapshot = snap;
       out.cartBadge = /button "Remove"/.test(snap) && /"Cart, 1 items?"|link "1"|text: "1"/.test(snap);
@@ -107,7 +108,7 @@ test("drives saucedemo: refs, typing, clicks, selects, guardrails and signals", 
 
   assert.equal(result.afterLoginUrl, "https://www.saucedemo.com/inventory.html", String(result.loginSnapshot));
   assert.equal(result.hasProducts, true);
-  assert.equal(result.cartBadge, true, String(result.cartSnapshot).slice(0, 2500));
+  assert.equal(result.cartBadge, true, `Driver notes: ${result.clickNotes || "(none)"}\n${String(result.cartSnapshot).slice(0, 2500)}`);
   assert.equal(result.sorted, true);
   assert.equal(result.phoneViewport, true);
   assert.match(String(result.offOrigin), /outside the allowed origins/);

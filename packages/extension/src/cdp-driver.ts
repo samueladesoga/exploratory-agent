@@ -354,19 +354,40 @@ export class CdpDriver implements BrowserDriver {
     return result.result.value;
   }
 
-  // Scrolls the element into view and returns its on-screen centre, refusing disabled or invisible targets.
-  private async centre(target: string): Promise<{ x: number; y: number }> {
-    const box = await this.callOn<{ x: number; y: number; width: number; height: number; disabled: boolean; vw: number; vh: number }>(target, function (this: any) {
+  // Scrolls the element into view and waits, like Playwright's actionability checks, until it has
+  // stopped moving and is the topmost element at its centre (React apps often re-render or shift
+  // layout just after a route change). Returns the centre and, if it never became topmost, what covers it.
+  private async centre(target: string): Promise<{ x: number; y: number; obstruction: string }> {
+    const box = await this.callOn<{ x: number; y: number; width: number; height: number; disabled: boolean; vw: number; vh: number; obstruction: string }>(target, async function (this: any) {
       const el = this.nodeType === 1 ? this : this.parentElement;
+      // Two animation frames, or 100ms if the tab isn't rendering frames.
+      const frames = () => new Promise((resolve) => { requestAnimationFrame(() => requestAnimationFrame(resolve)); setTimeout(resolve, 100); });
+      const measure = () => {
+        const rect = el.getBoundingClientRect();
+        const x = rect.x + rect.width / 2;
+        const y = rect.y + rect.height / 2;
+        const top = document.elementFromPoint(x, y);
+        const hit = !top || el === top || el.contains(top) || top.contains(el);
+        const cls = top && typeof top.className === "string" && top.className ? `.${top.className.trim().split(/\s+/).slice(0, 3).join(".")}` : "";
+        return { x, y, width: rect.width, height: rect.height, obstruction: hit ? "" : `<${top!.tagName.toLowerCase()}${cls}>` };
+      };
       el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
-      const rect = el.getBoundingClientRect();
+      let previous = measure();
+      const deadline = Date.now() + 2000;
+      while (Date.now() < deadline) {
+        await frames();
+        const current = measure();
+        const stable = current.x === previous.x && current.y === previous.y && current.width === previous.width && current.height === previous.height;
+        previous = current;
+        if (stable && !current.obstruction) break;
+      }
       const disabled = el.disabled === true || el.getAttribute("aria-disabled") === "true";
-      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, width: rect.width, height: rect.height, disabled, vw: innerWidth, vh: innerHeight };
+      return { ...previous, disabled, vw: innerWidth, vh: innerHeight };
     });
     if (box.disabled) throw new Error(`${target} is disabled`);
     if (box.width === 0 || box.height === 0) throw new Error(`${target} is not visible`);
     if (box.x < 0 || box.y < 0 || box.x > box.vw || box.y > box.vh) throw new Error(`${target} is outside the visible viewport and could not be scrolled into view`);
-    return { x: box.x, y: box.y };
+    return { x: box.x, y: box.y, obstruction: box.obstruction };
   }
 
   private async mouse(type: string, x: number, y: number, extra: object = {}): Promise<void> {
@@ -395,19 +416,7 @@ export class CdpDriver implements BrowserDriver {
   }
 
   async click(target: string): Promise<void> {
-    const { x, y } = await this.centre(target);
-    const obstruction = await this.callOn<string>(
-      target,
-      function (this: any, px: number, py: number) {
-        const el = this.nodeType === 1 ? this : this.parentElement;
-        const top = document.elementFromPoint(px, py);
-        if (!top || el === top || el.contains(top) || top.contains(el)) return "";
-        const cls = typeof top.className === "string" && top.className ? `.${top.className.trim().split(/\s+/).slice(0, 3).join(".")}` : "";
-        return `<${top.tagName.toLowerCase()}${cls}>`;
-      },
-      x,
-      y,
-    );
+    const { x, y, obstruction } = await this.centre(target);
     await this.mouse("mouseMoved", x, y, { button: "none" });
     await this.mouse("mousePressed", x, y, { clickCount: 1 });
     await this.mouse("mouseReleased", x, y, { clickCount: 1 });
