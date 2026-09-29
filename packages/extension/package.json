@@ -1,0 +1,24 @@
+{
+  "name": "@exploratory-agent/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chromium extension: exploratory testing of the current site from a side panel",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:test": "node build.mjs --test-harness",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p test",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "test:e2e": "npm run build:test && node --import tsx --test \"test/**/*.e2e.ts\"",
+    "package": "npm run build && rm -f exploratory-agent-extension.zip && cd dist && zip -qr ../exploratory-agent-extension.zip . && cd .. && echo 'Wrote packages/extension/exploratory-agent-extension.zip'"
+  },
+  "dependencies": {
+    "@exploratory-agent/core": "*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.4",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.63.0"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // No Node types: core must run unchanged in a browser extension.
+    "types": []
+  },
+  "include": ["src"]
+}

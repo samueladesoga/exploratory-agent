@@ -1,0 +1,19 @@
+{
+  "name": "@exploratory-agent/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Platform-neutral exploratory testing pipeline shared by the CLI and the browser extension",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p test",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
+  }
+}

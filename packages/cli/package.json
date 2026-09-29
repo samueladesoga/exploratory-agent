@@ -1,0 +1,16 @@
+{
+  "name": "@exploratory-agent/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Command-line exploratory testing harness: Playwright browsers driven by the Claude Agent SDK",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.276",
+    "@exploratory-agent/core": "*",
+    "dotenv": "^18.0.0",
+    "playwright": "^1.63.0"
+  }
+}
