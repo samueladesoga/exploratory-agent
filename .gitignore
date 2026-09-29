@@ -5,3 +5,5 @@ runs/
 .DS_Store
 .claude/settings.local.json
 packages/extension/dist/
+packages/extension/test-results/
+packages/extension/*.zip

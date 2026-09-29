@@ -1,0 +1,55 @@
+name: Nightly (real API)
+
+# Runs both apps against saucedemo.com with the real Anthropic API and checks each still finds
+# problem_user's deliberate bugs. Costs roughly $0.50–1 a night. It does nothing until you add an
+# ANTHROPIC_API_KEY repository secret (Settings → Secrets and variables → Actions).
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  paid-smoke:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SAUCE_USERNAME: problem_user
+      SAUCE_PASSWORD: secret_sauce
+    steps:
+      - name: Skip without an API key
+        if: env.ANTHROPIC_API_KEY == ''
+        run: echo "No ANTHROPIC_API_KEY secret; skipping." && exit 0
+      - uses: actions/checkout@v4
+        if: env.ANTHROPIC_API_KEY != ''
+      - uses: actions/setup-node@v4
+        if: env.ANTHROPIC_API_KEY != ''
+        with:
+          node-version: 22
+          cache: npm
+      - if: env.ANTHROPIC_API_KEY != ''
+        run: npm ci && npx playwright install --with-deps chromium
+
+      - name: CLI finds bugs
+        if: env.ANTHROPIC_API_KEY != ''
+        run: |
+          npm run explore -- --client clients/ci/saucedemo-nightly.yaml --out runs-ci
+          node -e '
+            const fs = require("fs");
+            const dir = fs.globSync("runs-ci/*/*/report.json")[0];
+            const report = JSON.parse(fs.readFileSync(dir, "utf8"));
+            console.log(`${report.issues.length} issues, ${report.autos.length} runtime errors, $${report.totalCostUsd.toFixed(2)}`);
+            if (!report.issues.length) { console.error("CLI found no issues on problem_user"); process.exit(1); }
+          '
+
+      - name: Extension finds bugs
+        if: env.ANTHROPIC_API_KEY != ''
+        run: RUN_PAID_TESTS=1 npm run test:e2e -w @exploratory-agent/extension -- --test-name-pattern "real API"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && env.ANTHROPIC_API_KEY != ''
+        with:
+          name: nightly-reports
+          path: |
+            runs-ci/
+            packages/extension/test-results/

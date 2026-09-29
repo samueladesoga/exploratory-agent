@@ -1,6 +1,28 @@
 # Plan: Exploratory Agent as a Chromium extension
 
-Status: Phase 1 (core refactor) done; Phase 2 (spike) next. Updated 2026-09-29.
+Status: Phases 1–4 and 6 built; Phase 5 prepared (store copy, privacy policy, icons, release zip) but not submitted. Updated 2026-09-29.
+
+## Progress and changes from the original plan
+
+| Phase | Status | Notes |
+|---|---|---|
+| 1. Core refactor | Done | CLI prompts and reports verified byte-identical to before the split. |
+| 2. Spike | Done | On saucedemo as problem_user, a real 16-step Quick run through the CDP driver and Messages API cost $0.22 and found 3 of the site's deliberate bugs. The CLI's comparable 19-step run cost $0.19 and found 2. |
+| 3. MVP | Done | Onboarding with key check, Quick mode, live feed, Stop, cost meter and cap, runtime signals, Summary view, Markdown and "Copy as issue", demo button. |
+| 4. QA layer | Done | Full mode (recon, plan review with edit and untick), Detailed view, CSV/JSON/HTML/print-to-PDF, YAML import and export, history. |
+| 5. Ship | Prepared | `packages/extension/store/` has the listing copy, permission justifications and privacy policy. Still needed: store screenshots, promo tile, demo video, developer account, and submission. |
+| 6. Growth | Done | "Run again" (repeats exactly the charters that ran) and templates by app type. |
+
+What changed from the design below, and why:
+
+- **The agent loop runs in the side panel page, not an offscreen document.** Offscreen documents can't use `chrome.debugger`. The panel says to keep it open during a run.
+- **No per-site host permissions.** `chrome.debugger` doesn't need them. The only host permission is `api.anthropic.com`. The per-site authorisation checkbox is still there.
+- **PDF comes from the browser's print dialog, not `Page.printToPDF`.** Extensions can't attach the debugger to their own pages. Downloads use plain links, so there's no `downloads` permission either.
+- **Blocked navigations are pre-checked, and the driver recovers from them.** When a click triggers a blocked navigation, Chrome shows an error page, so the driver goes back and tells the agent.
+- **esbuild alone, not Vite.** The build is one small script.
+- **The official `@anthropic-ai/sdk`** in browser mode (`dangerouslyAllowBrowser`, the user's own key), with a manual loop for turn, budget, timeout and abort limits. Opus requests opt into server-side refusal fallbacks.
+
+Tests: unit tests for core and the extension; end-to-end tests that load the extension into Chromium and drive saucedemo, a local fixture site, and the full side-panel UI against a fake API (free, in CI); and a paid nightly run of both apps against saucedemo (only once an `ANTHROPIC_API_KEY` secret is added).
 
 ## Goal
 

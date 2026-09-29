@@ -6,6 +6,36 @@ A reusable harness that uses Claude to run session-based exploratory testing aga
 recon ──► plan ──► sessions (Claude drives Chromium) ──► triage ──► report.html / .pdf / .md / .csv / .json
 ```
 
+There are two ways to use it:
+
+- **Browser extension** for Chrome, Edge and other Chromium browsers: test the site you're on from a side panel, with no setup beyond an API key. See [Browser extension](#browser-extension).
+- **Command-line tool** for repeatable client runs and CI: the rest of this README.
+
+Both run the same pipeline from `packages/core`, and a config exported from the extension runs unchanged in the CLI.
+
+## Browser extension
+
+Until it's in the Chrome Web Store, load it unpacked:
+
+```bash
+npm install
+npm run build:extension            # writes packages/extension/dist
+```
+
+Then open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and choose `packages/extension/dist`. Click the extension's toolbar icon to open the side panel.
+
+- **Find bugs on this page:** a Quick check. One ~25-step session on the current page, then triage. A Sonnet session usually costs $0.20–0.30.
+- **Plan a session:** Full mode. Recon, a plan you review and edit, several sessions, then a full report.
+- **Try it on a demo shop:** logs in to saucedemo.com as its deliberately buggy `problem_user` and runs a Quick check.
+
+How it differs from the CLI:
+
+- **Login:** there's no auth config. The agent uses your browser's session, so log in to the site first, ideally with a test account.
+- **Where it runs:** the agent works in its own tab in an "Exploratory Agent" tab group. Chrome shows a "started debugging this browser" bar while it runs, and dismissing that bar stops the run.
+- **Read-only by default:** form submissions and other changes are blocked unless you untick it.
+- **Keep the side panel open** during a run.
+- **Storage:** your API key, settings, run history and reports stay in the browser. Page content is sent only to api.anthropic.com. See the [privacy policy](packages/extension/store/PRIVACY.md).
+
 ## Setup
 
 Requires Node.js 20+.
@@ -95,18 +125,21 @@ Tips for better results:
 
 ## Project layout
 
-An npm workspaces monorepo. The pipeline lives in `core` and is shared by the CLI and the (in-progress) Chromium extension, so both stay at feature parity. See [docs/chromium-extension-plan.md](docs/chromium-extension-plan.md).
+An npm workspaces monorepo. The pipeline lives in `core` and is shared by the CLI and the Chromium extension, so both stay at feature parity. See [docs/chromium-extension-plan.md](docs/chromium-extension-plan.md).
 
 ```
 packages/
   core/                 platform-neutral pipeline (no Node APIs, runs in a browser too)
-    src/config.ts       client YAML schema (zod) and parser
+    src/config.ts       client YAML schema (zod), parser and YAML export
     src/driver.ts       BrowserDriver interface, SafetyPolicy (guardrails), SignalBuffer
     src/agent.ts        AgentRunner interface and tool definitions
+    src/messages-runner.ts  AgentRunner on the Messages API (used by the extension)
+    src/models.ts       model aliases, prices and cost estimates
     src/recon.ts        site mapping for the planner
     src/planner.ts      charter generation
     src/tools.ts        tools exposed to the exploring agent
     src/explorer.ts     runs one charter as an agent session
+    src/pipeline.ts     sessions → triage → report, and the Quick-mode charter
     src/triage.ts       runtime-error grouping and AI triage
     src/report.ts       HTML / Markdown / CSV / JSON report renderers
     src/prompts.ts      all prompts in one place, easy to tune
@@ -117,15 +150,27 @@ packages/
     src/sdk-runner.ts   AgentRunner on the Claude Agent SDK (locked-down tool set)
     src/auth.ts         one-time login and shared storage state
     src/pdf.ts          report.pdf rendering
-  extension/            Chromium extension (skeleton; see the plan)
+  extension/            Chromium extension (Manifest V3 side panel)
+    src/cdp-driver.ts   BrowserDriver over chrome.debugger: element refs, guardrails, signals
+    src/ax-tree.ts      accessibility tree → snapshot with [ref=eN] refs
+    src/runs.ts         Quick and Full runs in the side panel
+    src/sidepanel.ts    the UI
+    src/report-page.ts  full report viewer and exports
+    test/               unit tests, and end-to-end tests in real Chromium
+    store/              store listing, permission justifications, privacy policy
 ```
 
 ## Development
 
 ```bash
 npm run typecheck        # all packages
-npm test                 # core unit tests
+npm test                 # unit tests (core and extension)
 npm run build:extension  # bundle to packages/extension/dist, then "Load unpacked" in chrome://extensions
+npm run test:e2e -w @exploratory-agent/extension    # extension in real Chromium, fake API, no cost
+npm run package -w @exploratory-agent/extension     # release zip for the Chrome Web Store / Edge Add-ons
+RUN_PAID_TESTS=1 npm run test:e2e -w @exploratory-agent/extension   # also a real run on saucedemo (~$0.25)
 ```
+
+CI runs the free checks on every push and pull request. `.github/workflows/nightly.yml` runs both apps against saucedemo with the real API every night, but only after you add an `ANTHROPIC_API_KEY` repository secret.
 
 New pipeline features go in `core` first, then each app exposes them.

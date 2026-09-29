@@ -19,3 +19,22 @@ jobs:
       - run: npm test
       # Bundling for platform "browser" fails if core picks up a Node-only dependency.
       - run: npm run build:extension
+
+  extension-e2e:
+    # Loads the extension into Chromium and drives saucedemo.com and local fixture sites. The
+    # Anthropic API is faked, so this costs nothing.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e -w @exploratory-agent/extension
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extension-screenshots
+          path: packages/extension/test-results/
