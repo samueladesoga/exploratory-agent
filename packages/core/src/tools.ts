@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineTool, type AnyToolDef } from "./agent.js";
+import type { RunObserver } from "./context.js";
 import type { BrowserDriver } from "./driver.js";
 import { CATEGORIES, SEVERITIES, type ActionLogEntry, type Finding } from "./types.js";
 import { errMsg, firstLines, text, truncate } from "./util.js";
@@ -18,7 +19,7 @@ export interface SessionState {
   notCovered: string[];
 }
 
-export function buildSessionTools(browser: BrowserDriver, session: SessionState): AnyToolDef[] {
+export function buildSessionTools(browser: BrowserDriver, session: SessionState, observer?: RunObserver): AnyToolDef[] {
   const budget = (): string => {
     const remaining = session.maxSteps - session.steps;
     return remaining <= 5
@@ -42,7 +43,7 @@ export function buildSessionTools(browser: BrowserDriver, session: SessionState)
       ok = false;
       error = firstLines(errMsg(err));
     }
-    session.log.push({
+    const entry = {
       step: session.steps,
       tool: name,
       args: truncate(JSON.stringify(args), 300),
@@ -50,7 +51,9 @@ export function buildSessionTools(browser: BrowserDriver, session: SessionState)
       ok,
       note: ok ? undefined : error,
       timestamp: new Date().toISOString(),
-    });
+    };
+    session.log.push(entry);
+    observer?.action?.(session.sessionId, entry);
     const parts = [ok ? `OK: ${name}` : `FAILED: ${name}: ${error}`];
     const updates = browser.drainNew();
     if (updates) parts.push(updates);
@@ -178,6 +181,7 @@ export function buildSessionTools(browser: BrowserDriver, session: SessionState)
           source: "agent",
           timestamp: new Date().toISOString(),
         });
+        observer?.finding?.(session.findings[session.findings.length - 1]);
         return text(`Recorded ${id}. Continue exploring.\n${budget()}`);
       },
     ),

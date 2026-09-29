@@ -65,7 +65,7 @@ export function buildPlan(cfg: ClientConfig, submission: PlanSubmission): TestPl
 export async function createPlan(
   cfg: ClientConfig,
   siteMap: string,
-  ctx: Pick<RunContext, "runner" | "log">,
+  ctx: Pick<RunContext, "runner" | "log" | "signal" | "observer">,
 ): Promise<{ plan: TestPlan; costUsd: number }> {
   let plan: TestPlan | undefined;
 
@@ -82,6 +82,8 @@ export async function createPlan(
     model: cfg.run.plannerModel,
     maxTurns: 4,
     log: ctx.log,
+    signal: ctx.signal,
+    onTurn: (progress) => ctx.observer?.cost?.("planner", progress.costUsd),
   });
 
   if (!plan) throw new Error(`Planner finished without submitting a plan (stop reason: ${run.stopReason}).`);

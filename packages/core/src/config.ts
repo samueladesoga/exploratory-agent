@@ -1,4 +1,4 @@
-import { parse } from "yaml";
+import { parse, stringify } from "yaml";
 import { z } from "zod";
 
 const AuthSchema = z.discriminatedUnion("type", [
@@ -78,6 +78,21 @@ export function parseClientConfig(raw: unknown, source: string): ClientConfig {
 
 export function parseClientConfigYaml(yamlText: string, source: string): ClientConfig {
   return parseClientConfig(parse(yamlText), source);
+}
+
+// A client YAML the CLI can run, e.g. exported from the extension. Login isn't exported: the
+// extension uses the browser's own session, so the CLI user adds auth themselves.
+export function clientConfigToYaml(cfg: ClientConfig): string {
+  const { auth, browser: _browser, ...rest } = cfg;
+  const header = [
+    `# Exported client config for ${cfg.name}.`,
+    "# Run it with: npm run explore -- --client clients/<file>.yaml",
+    auth.type === "none" ? "# If the app needs a login, add an auth section (see clients/_template.yaml)." : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const body = auth.type === "none" ? rest : { ...rest, auth };
+  return `${header}\n${stringify(body, { lineWidth: 0 })}`;
 }
 
 export function appOrigins(cfg: ClientConfig): Set<string> {

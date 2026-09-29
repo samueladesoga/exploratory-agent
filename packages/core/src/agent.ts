@@ -40,6 +40,10 @@ export interface AgentRunOptions {
   timeoutMinutes?: number;
   log: Logger;
   verbose?: boolean;
+  // Stops the run early (the extension's Stop button). Runners report stopReason "aborted".
+  signal?: AbortSignal;
+  // Called after each model turn with the running totals, for live cost meters.
+  onTurn?: (progress: { turns: number; costUsd: number }) => void;
 }
 
 export interface AgentRun {

@@ -42,13 +42,15 @@ export async function runSession(cfg: ClientConfig, charter: Charter, ctx: RunCo
       name: sessionId,
       systemPrompt: explorerSystem(cfg, browser.selectorGuide),
       prompt: explorerPrompt(charter, startSnapshot),
-      tools: buildSessionTools(browser, state),
+      tools: buildSessionTools(browser, state, ctx.observer),
       model: cfg.run.explorerModel,
       maxTurns: charter.maxSteps + 20,
       maxBudgetUsd: cfg.run.maxBudgetUsdPerSession,
       timeoutMinutes: cfg.run.maxMinutesPerSession,
       log: ctx.log,
       verbose: ctx.verbose,
+      signal: ctx.signal,
+      onTurn: (progress) => ctx.observer?.cost?.(sessionId, progress.costUsd),
     });
     costUsd = run.costUsd;
     stopReason = state.ended ? "completed" : run.stopReason;

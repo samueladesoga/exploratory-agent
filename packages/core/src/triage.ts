@@ -87,7 +87,7 @@ export async function triage(
   cfg: ClientConfig,
   sessions: SessionResult[],
   autos: Finding[],
-  ctx: Pick<RunContext, "runner" | "log">,
+  ctx: Pick<RunContext, "runner" | "log" | "signal" | "observer">,
 ): Promise<{ issues: Issue[]; summary: string[]; costUsd: number }> {
   const findings = sessions.flatMap((session) => session.findings);
   let submitted: TriageSubmission | undefined;
@@ -113,6 +113,8 @@ export async function triage(
         model: cfg.run.plannerModel,
         maxTurns: 4,
         log: ctx.log,
+        signal: ctx.signal,
+        onTurn: (progress) => ctx.observer?.cost?.("triage", progress.costUsd),
       });
       costUsd = run.costUsd;
     } catch (err) {

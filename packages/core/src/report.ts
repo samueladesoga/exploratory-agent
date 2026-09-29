@@ -60,6 +60,28 @@ function severityCounts(issues: Issue[]): Record<Severity, SeverityCount> {
   return counts;
 }
 
+// One issue as a GitHub/Jira-ready Markdown body, for "Copy as issue" in the extension.
+// Screenshots are left out: they live in the run, not at a URL a tracker can load.
+export function issueToMarkdown(issue: Issue): string {
+  const finding = issue.primary;
+  const lines = [
+    `**Severity:** ${issue.severity} · **Category:** ${issue.category}${issue.needsVerification ? " · needs verification" : ""}`,
+    `**Page:** ${finding.pageUrl}`,
+    "",
+    "### Steps to reproduce",
+    "",
+    ...finding.steps.map((step, index) => `${index + 1}. ${step}`),
+    "",
+    `**Expected:** ${finding.expected}`,
+    "",
+    `**Actual:** ${finding.actual}`,
+  ];
+  if (finding.details?.length) lines.push("", ...finding.details.map((detail) => `- ${detail}`));
+  if (issue.triageNotes?.length) lines.push("", "### Notes", "", ...issue.triageNotes.map((note) => `- ${note}`));
+  lines.push("", `_Found by an AI exploratory testing agent (${issue.id}, ${finding.reproduced ? "reproduced" : "not reproduced"}, ${finding.confidence} confidence)._`);
+  return lines.join("\n");
+}
+
 function toMarkdown(report: RunReport): string {
   const counts = severityCounts(report.issues);
   const confirmed = report.issues.filter((issue) => !issue.needsVerification);

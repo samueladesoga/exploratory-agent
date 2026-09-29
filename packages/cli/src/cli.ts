@@ -1,18 +1,15 @@
 import "dotenv/config";
 import {
-  autoFindings,
   createPlan,
   errMsg,
+  executePlan,
   makeLogger,
   parseClientConfigYaml,
   planToMarkdown,
-  pool,
   reconnoitre,
   renderReports,
-  runSession,
   slug,
   stamp,
-  triage,
   type RunContext,
   type Signal,
   type TestPlan,
@@ -78,7 +75,7 @@ async function main(): Promise<void> {
     log,
     verbose: values.verbose,
   };
-  let totalCostUsd = 0;
+  let planCostUsd = 0;
   let reconSignals: Signal[] = [];
 
   try {
@@ -94,7 +91,7 @@ async function main(): Promise<void> {
       log(`Planning ${cfg.run.sessions} charters from ${recon.pagesVisited} pages…`);
       const planned = await createPlan(cfg, recon.siteMap, ctx);
       plan = planned.plan;
-      totalCostUsd += planned.costUsd;
+      planCostUsd = planned.costUsd;
     }
     await storage.write("plan.json", JSON.stringify(plan, null, 2));
     await storage.write("plan.md", planToMarkdown(plan));
@@ -110,36 +107,17 @@ async function main(): Promise<void> {
       const wantedIds = new Set(values.charters.split(",").map((id) => id.trim().toUpperCase()));
       charters = charters.filter((charter) => wantedIds.has(charter.id));
     }
-    log(`Running ${charters.length} session(s), ${cfg.run.concurrency} at a time…`);
-    const sessions = await pool(charters, cfg.run.concurrency, (charter) => runSession(cfg, charter, ctx));
-    totalCostUsd += sessions.reduce((sum, session) => sum + session.costUsd, 0);
-
-    log("Triaging findings…");
-    const autos = autoFindings([...reconSignals, ...sessions.flatMap((session) => session.signals)]);
-    const triaged = await triage(cfg, sessions, autos, ctx);
-    totalCostUsd += triaged.costUsd;
-
-    const reports = renderReports({
-      cfg,
-      plan,
-      sessions,
-      issues: triaged.issues,
-      autos,
-      summary: triaged.summary,
-      totalCostUsd,
-      startedAt,
-      endedAt: new Date().toISOString(),
-    });
-    for (const [file, contents] of Object.entries(reports)) await storage.write(file, contents);
+    const report = await executePlan(cfg, plan, charters, ctx, { priorSignals: reconSignals, priorCostUsd: planCostUsd, startedAt });
+    for (const [file, contents] of Object.entries(renderReports(report))) await storage.write(file, contents);
     await renderPdf(path.join(runDir, "report.html"), path.join(runDir, "report.pdf")).catch((err) => log(`report.pdf skipped: ${errMsg(err)}`));
 
-    const issueCountBySeverity = triaged.issues.reduce<Record<string, number>>((counts, issue) => {
+    const issueCountBySeverity = report.issues.reduce<Record<string, number>>((counts, issue) => {
       const key = issue.needsVerification ? "to verify" : issue.severity;
       counts[key] = (counts[key] ?? 0) + 1;
       return counts;
     }, {});
     log(
-      `Done. ${triaged.issues.length} issue(s) ${JSON.stringify(issueCountBySeverity)}, ${autos.length} runtime error pattern(s). Est. cost $${totalCostUsd.toFixed(2)}`,
+      `Done. ${report.issues.length} issue(s) ${JSON.stringify(issueCountBySeverity)}, ${report.autos.length} runtime error pattern(s). Est. cost $${report.totalCostUsd.toFixed(2)}`,
     );
     log(`Report: ${path.join(runDir, "report.html")}`);
   } finally {
