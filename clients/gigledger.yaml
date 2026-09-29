@@ -32,5 +32,5 @@ safety:
     - "backtrace\\.io|events\\.backtrace"
 
 run:
-  sessions: 3
+  sessions: 5
   maxStepsPerSession: 40
