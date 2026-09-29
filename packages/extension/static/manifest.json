@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Exploratory Agent",
+  "version": "0.1.0",
+  "description": "An AI exploratory tester for the site you're on. Bring your own Anthropic API key.",
+  "minimum_chrome_version": "120",
+  "action": { "default_title": "Open Exploratory Agent" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["sidePanel", "storage", "tabs"]
+}

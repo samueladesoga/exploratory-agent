@@ -1,6 +1,6 @@
-import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import type { BrowserHarness } from "./browser.js";
+import { defineTool, type AnyToolDef } from "./agent.js";
+import type { BrowserDriver } from "./driver.js";
 import { CATEGORIES, SEVERITIES, type ActionLogEntry, type Finding } from "./types.js";
 import { errMsg, firstLines, text, truncate } from "./util.js";
 
@@ -18,25 +18,7 @@ export interface SessionState {
   notCovered: string[];
 }
 
-export const SESSION_TOOL_NAMES = [
-  "navigate",
-  "click",
-  "fill",
-  "press_key",
-  "select_option",
-  "set_checked",
-  "hover",
-  "go_back",
-  "reload",
-  "set_viewport",
-  "wait",
-  "snapshot",
-  "screenshot",
-  "record_finding",
-  "end_session",
-];
-
-export function buildSessionTools(browser: BrowserHarness, session: SessionState) {
+export function buildSessionTools(browser: BrowserDriver, session: SessionState): AnyToolDef[] {
   const budget = (): string => {
     const remaining = session.maxSteps - session.steps;
     return remaining <= 5
@@ -77,60 +59,60 @@ export function buildSessionTools(browser: BrowserHarness, session: SessionState
     return text(parts.join("\n\n"));
   }
 
-  const target = z.string().describe('Playwright selector, e.g. role=button[name="Save"], text="Sign in", css=#email');
+  const target = z.string().describe(browser.targetHint);
 
   return [
-    tool(
+    defineTool(
       "navigate",
       "Open a URL: absolute, or a path relative to the current page. Only the application's own origins are allowed. Returns the new page snapshot.",
       { url: z.string() },
       (args) => act("navigate", args, () => browser.navigate(args.url)),
     ),
-    tool("click", "Click an element. Returns the resulting page snapshot.", { target }, (args) =>
+    defineTool("click", "Click an element. Returns the resulting page snapshot.", { target }, (args) =>
       act("click", args, () => browser.click(args.target)),
     ),
-    tool(
+    defineTool(
       "fill",
       "Clear an input or textarea and enter a value. Returns no snapshot; submit, press a key, or call snapshot to see validation messages.",
       { target, value: z.string() },
       (args) => act("fill", args, () => browser.fill(args.target, args.value), false),
     ),
-    tool(
+    defineTool(
       "press_key",
       "Press a key (e.g. Enter, Tab, Escape, ArrowDown), optionally focused on an element.",
       { key: z.string(), target: target.optional() },
       (args) => act("press_key", args, () => browser.press(args.key, args.target)),
     ),
-    tool(
+    defineTool(
       "select_option",
       "Choose an option in a native <select> by its value or visible label.",
       { target, value: z.string() },
       (args) => act("select_option", args, () => browser.selectOption(args.target, args.value)),
     ),
-    tool("set_checked", "Check or uncheck a checkbox or radio button.", { target, checked: z.boolean() }, (args) =>
+    defineTool("set_checked", "Check or uncheck a checkbox or radio button.", { target, checked: z.boolean() }, (args) =>
       act("set_checked", args, () => browser.setChecked(args.target, args.checked)),
     ),
-    tool("hover", "Hover over an element, e.g. to open a menu or tooltip.", { target }, (args) =>
+    defineTool("hover", "Hover over an element, e.g. to open a menu or tooltip.", { target }, (args) =>
       act("hover", args, () => browser.hover(args.target)),
     ),
-    tool("go_back", "Press the browser Back button.", {}, (args) => act("go_back", args, () => browser.goBack())),
-    tool("reload", "Reload the current page.", {}, (args) => act("reload", args, () => browser.reload())),
-    tool(
+    defineTool("go_back", "Press the browser Back button.", {}, (args) => act("go_back", args, () => browser.goBack())),
+    defineTool("reload", "Reload the current page.", {}, (args) => act("reload", args, () => browser.reload())),
+    defineTool(
       "set_viewport",
       "Resize the viewport to test responsive layout, e.g. 390x844 (phone), 768x1024 (tablet), 1366x900 (desktop).",
       { width: z.number().int().min(320).max(2560), height: z.number().int().min(480).max(1600) },
       (args) => act("set_viewport", args, () => browser.setViewport(args.width, args.height)),
     ),
-    tool(
+    defineTool(
       "wait",
       "Wait up to 10 seconds for something asynchronous to finish, then return the snapshot.",
       { seconds: z.number().min(0.5).max(10) },
       (args) => act("wait", args, () => browser.wait(args.seconds)),
     ),
-    tool("snapshot", "Get the current page's accessibility tree, URL and any new runtime signals.", {}, (args) =>
+    defineTool("snapshot", "Get the current page's accessibility tree, URL and any new runtime signals.", {}, (args) =>
       act("snapshot", args, async () => {}),
     ),
-    tool(
+    defineTool(
       "screenshot",
       "Capture the visible viewport as an image to judge visual layout. The image is saved as evidence.",
       { label: z.string().describe("Short description of what the screenshot shows") },
@@ -151,7 +133,7 @@ export function buildSessionTools(browser: BrowserHarness, session: SessionState
         }
       },
     ),
-    tool(
+    defineTool(
       "record_finding",
       "Record a confirmed defect. A screenshot of the current page is attached unless attach_screenshot is false. Does not use a step.",
       {
@@ -199,7 +181,7 @@ export function buildSessionTools(browser: BrowserHarness, session: SessionState
         return text(`Recorded ${id}. Continue exploring.\n${budget()}`);
       },
     ),
-    tool(
+    defineTool(
       "end_session",
       "Finish the session with an honest summary of coverage. Call this when the charter is covered or the budget is nearly spent.",
       {

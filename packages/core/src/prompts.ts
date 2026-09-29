@@ -50,7 +50,8 @@ ${siteMap}
 Create exactly ${cfg.run.sessions} charters. Each session has a budget of about ${cfg.run.maxStepsPerSession} browser actions. Then call submit_plan.`;
 }
 
-export function explorerSystem(cfg: ClientConfig): string {
+// selectorGuide comes from the browser driver, since each one addresses elements differently.
+export function explorerSystem(cfg: ClientConfig, selectorGuide: string): string {
   const safety: string[] = [];
   if (cfg.safety.blockMutations) {
     safety.push(
@@ -80,12 +81,7 @@ ${clientContext(cfg)}
 - Tool results include "Runtime signals" (console errors, uncaught exceptions, failing HTTP calls). These are collected and reported automatically. When one appears, note which action triggered it. Record a finding for it only when you can tie it to user-visible impact, and quote the signal in "actual".
 
 ## Selectors
-Targets are Playwright selectors. Prefer, in order:
-  role=button[name="Save"]   role=link[name="Pricing"]   role=textbox[name="Email"]
-  text="Exact visible text"
-  css=input[name="email"]    css=[data-testid="submit"]
-Build them from the accessibility snapshot. If one fails, look at a fresh snapshot and adapt rather than retrying the same selector.
-A selector that matches more than one element fails with "strict mode violation" instead of silently acting on the first match — when two fields share a name (e.g. two date inputs both called "Select date"), add ">> nth=0" / ">> nth=1", or scope the selector to a container near a distinguishing label, rather than assuming DOM order.
+${selectorGuide}
 
 ## Recording defects
 - Call record_finding as soon as a defect is confirmed. Don't save them up for the end.

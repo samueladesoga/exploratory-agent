@@ -95,17 +95,37 @@ Tips for better results:
 
 ## Project layout
 
+An npm workspaces monorepo. The pipeline lives in `core` and is shared by the CLI and the (in-progress) Chromium extension, so both stay at feature parity. See [docs/chromium-extension-plan.md](docs/chromium-extension-plan.md).
+
 ```
-src/
-  cli.ts        orchestration and command-line options
-  config.ts     client YAML schema (zod) and loader
-  auth.ts       one-time login and shared storage state
-  browser.ts    Playwright harness: guardrails, signal capture, actions
-  recon.ts      site mapping for the planner
-  planner.ts    charter generation
-  tools.ts      tools exposed to the exploring agent
-  explorer.ts   runs one charter as an agent session
-  agent.ts      Claude Agent SDK wrapper (locked-down tool set)
-  reporter.ts   runtime-error grouping, AI triage, report writers
-  prompts.ts    all prompts in one place, easy to tune
+packages/
+  core/                 platform-neutral pipeline (no Node APIs, runs in a browser too)
+    src/config.ts       client YAML schema (zod) and parser
+    src/driver.ts       BrowserDriver interface, SafetyPolicy (guardrails), SignalBuffer
+    src/agent.ts        AgentRunner interface and tool definitions
+    src/recon.ts        site mapping for the planner
+    src/planner.ts      charter generation
+    src/tools.ts        tools exposed to the exploring agent
+    src/explorer.ts     runs one charter as an agent session
+    src/triage.ts       runtime-error grouping and AI triage
+    src/report.ts       HTML / Markdown / CSV / JSON report renderers
+    src/prompts.ts      all prompts in one place, easy to tune
+    test/               unit tests (node:test)
+  cli/                  the command-line app
+    src/cli.ts          orchestration and command-line options
+    src/playwright-driver.ts  BrowserDriver on Playwright: guardrails, signal capture, actions
+    src/sdk-runner.ts   AgentRunner on the Claude Agent SDK (locked-down tool set)
+    src/auth.ts         one-time login and shared storage state
+    src/pdf.ts          report.pdf rendering
+  extension/            Chromium extension (skeleton; see the plan)
 ```
+
+## Development
+
+```bash
+npm run typecheck        # all packages
+npm test                 # core unit tests
+npm run build:extension  # bundle to packages/extension/dist, then "Load unpacked" in chrome://extensions
+```
+
+New pipeline features go in `core` first, then each app exposes them.

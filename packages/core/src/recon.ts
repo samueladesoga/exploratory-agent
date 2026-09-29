@@ -1,35 +1,7 @@
-import { BrowserHarness } from "./browser.js";
 import type { ClientConfig } from "./config.js";
+import type { RunContext } from "./context.js";
 import type { Signal } from "./types.js";
-import { errMsg, firstLines, type Logger } from "./util.js";
-
-interface PageInfo {
-  title: string;
-  headings: string[];
-  links: string[];
-  nav: string[];
-  forms: string[][];
-  looseInputs: string[];
-  buttons: string[];
-}
-
-const PAGE_INFO_SCRIPT = `(() => {
-  const textOf = (element) => ((element && element.textContent) || "").replace(/\\s+/g, " ").trim().slice(0, 80);
-  const labelFor = (element) => {
-    const label = element.id ? document.querySelector('label[for="' + CSS.escape(element.id) + '"]') : element.closest("label");
-    return textOf(label) || element.getAttribute("aria-label") || element.getAttribute("placeholder") || element.getAttribute("name") || element.getAttribute("type") || element.tagName.toLowerCase();
-  };
-  const fieldSelector = 'input:not([type=hidden]),select,textarea';
-  return {
-    title: document.title,
-    headings: Array.from(document.querySelectorAll("h1,h2,h3")).map(textOf).filter(Boolean).slice(0, 12),
-    links: Array.from(document.querySelectorAll("a[href]")).map((anchor) => anchor.href),
-    nav: Array.from(document.querySelectorAll("nav a, header a, [role=navigation] a")).map(textOf).filter(Boolean).slice(0, 25),
-    forms: Array.from(document.querySelectorAll("form")).slice(0, 5).map((form) => Array.from(form.querySelectorAll(fieldSelector)).map(labelFor).slice(0, 15)),
-    looseInputs: Array.from(document.querySelectorAll(fieldSelector)).filter((element) => !element.closest("form")).map(labelFor).slice(0, 15),
-    buttons: Array.from(document.querySelectorAll("button,[role=button],input[type=submit]")).map((button) => textOf(button) || button.value || button.getAttribute("aria-label") || "").filter(Boolean).slice(0, 20),
-  };
-})()`;
+import { errMsg, firstLines } from "./util.js";
 
 const SKIP_PATTERNS = [/log-?out|sign-?out/i, /\.(pdf|zip|csv|xlsx?|docx?|png|jpe?g|gif|svg|mp4|webp)(\?|$)/i, /^mailto:|^tel:/i];
 
@@ -49,17 +21,14 @@ export interface ReconResult {
   signals: Signal[];
 }
 
-export async function reconnoitre(
-  cfg: ClientConfig,
-  opts: { storageState?: string; screensDir: string; headless: boolean; log: Logger },
-): Promise<ReconResult> {
-  const browser = new BrowserHarness(cfg, { screensDir: opts.screensDir, label: "recon", headless: opts.headless });
+export async function reconnoitre(cfg: ClientConfig, ctx: Pick<RunContext, "createDriver" | "log">): Promise<ReconResult> {
+  const browser = ctx.createDriver("recon");
   const queue = [cfg.baseUrl, ...cfg.seedPaths.map((seedPath) => new URL(seedPath, cfg.baseUrl).toString())];
   const visited = new Set<string>();
   const discovered = new Set<string>();
   const sections: string[] = [];
 
-  await browser.start(opts.storageState);
+  await browser.start();
   try {
     while (queue.length && visited.size < cfg.run.reconMaxPages) {
       const url = queue.shift()!;
@@ -76,9 +45,9 @@ export async function reconnoitre(
       const landedUrl = browser.currentUrl();
       const landedKey = pageKey(landedUrl);
       if (landedKey) visited.add(landedKey);
-      opts.log(`recon: ${landedUrl}`);
+      ctx.log(`recon: ${landedUrl}`);
 
-      const info = (await browser.page.evaluate(PAGE_INFO_SCRIPT).catch(() => null)) as PageInfo | null;
+      const info = await browser.pageInfo().catch(() => null);
       if (!info) {
         sections.push(`### ${landedUrl}\n(could not read page structure)`);
         continue;

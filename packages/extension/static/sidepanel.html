@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Exploratory Agent</title>
+    <style>
+      :root { --bg: #f7f7f5; --ink: #1d1d1f; --muted: #6b6b70; --line: #e3e3e0; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --ink: #f2f2f2; --muted: #a1a1a6; --line: #3a3a3c; } }
+      body { margin: 0; padding: 16px; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+      h1 { font-size: 16px; margin: 0 0 12px; }
+      .muted { color: var(--muted); }
+      code { word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <h1>Exploratory Agent</h1>
+    <p id="status" class="muted">Loading…</p>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

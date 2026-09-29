@@ -4,9 +4,16 @@
   "private": true,
   "description": "Reusable Claude-powered exploratory testing harness for web applications",
   "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/cli",
+    "packages/extension"
+  ],
   "scripts": {
-    "explore": "tsx src/cli.ts",
-    "typecheck": "tsc --noEmit",
+    "explore": "tsx packages/cli/src/cli.ts",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "build:extension": "npm run build -w @exploratory-agent/extension",
     "setup-browsers": "playwright install chromium"
   },
   "engines": {
@@ -16,12 +23,5 @@
     "@types/node": "^26.6.1",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
-  },
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.276",
-    "dotenv": "^18.0.0",
-    "playwright": "^1.63.0",
-    "yaml": "^2.9.1",
-    "zod": "^4.6.5"
   }
 }

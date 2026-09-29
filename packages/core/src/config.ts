@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { parse } from "yaml";
 import { z } from "zod";
 
@@ -67,14 +66,18 @@ export const ClientConfigSchema = z.object({
 
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 
-export async function loadClientConfig(file: string): Promise<ClientConfig> {
-  const raw = parse(await readFile(file, "utf8"));
+// `source` names where the config came from (a file path, "side panel"…) for error messages.
+export function parseClientConfig(raw: unknown, source: string): ClientConfig {
   const result = ClientConfigSchema.safeParse(raw);
   if (!result.success) {
     const problems = result.error.issues.map((issue) => `  - ${issue.path.join(".") || "(root)"}: ${issue.message}`).join("\n");
-    throw new Error(`Invalid client config ${file}:\n${problems}`);
+    throw new Error(`Invalid client config ${source}:\n${problems}`);
   }
   return result.data;
+}
+
+export function parseClientConfigYaml(yamlText: string, source: string): ClientConfig {
+  return parseClientConfig(parse(yamlText), source);
 }
 
 export function appOrigins(cfg: ClientConfig): Set<string> {

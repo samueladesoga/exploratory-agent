@@ -1,15 +1,30 @@
 import "dotenv/config";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  autoFindings,
+  createPlan,
+  errMsg,
+  makeLogger,
+  parseClientConfigYaml,
+  planToMarkdown,
+  pool,
+  reconnoitre,
+  renderReports,
+  runSession,
+  slug,
+  stamp,
+  triage,
+  type RunContext,
+  type Signal,
+  type TestPlan,
+} from "@exploratory-agent/core";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { prepareAuth } from "./auth.js";
-import { loadClientConfig } from "./config.js";
-import { runSession } from "./explorer.js";
-import { createPlan, planToMarkdown } from "./planner.js";
-import { reconnoitre } from "./recon.js";
-import { autoFindings, triage, writeReports } from "./reporter.js";
-import type { Signal, TestPlan } from "./types.js";
-import { errMsg, makeLogger, pool, slug, stamp } from "./util.js";
+import { fsStorage } from "./fs-storage.js";
+import { renderPdf } from "./pdf.js";
+import { PlaywrightDriver } from "./playwright-driver.js";
+import { sdkRunner } from "./sdk-runner.js";
 
 const USAGE = `Usage: npm run explore -- --client clients/<client>.yaml [options]
 
@@ -44,19 +59,25 @@ async function main(): Promise<void> {
   }
 
   const log = makeLogger();
-  const cfg = await loadClientConfig(values.client);
+  const cfg = parseClientConfigYaml(await readFile(values.client, "utf8"), values.client);
   if (values.sessions) cfg.run.sessions = Number(values.sessions);
   const headless = values.headed ? false : cfg.browser.headless;
   if (!process.env.ANTHROPIC_API_KEY) log("⚠ ANTHROPIC_API_KEY is not set; the SDK will try other configured credentials.");
 
   const startedAt = new Date().toISOString();
   const runDir = path.resolve(values.out!, slug(cfg.name), stamp());
-  await mkdir(path.join(runDir, "sessions"), { recursive: true });
-  await mkdir(path.join(runDir, "screens"), { recursive: true });
+  const storage = fsStorage(runDir);
   log(`Client: ${cfg.name} (${cfg.baseUrl})`);
   log(`Output: ${runDir}`);
 
   const auth = await prepareAuth(cfg, runDir, headless, log);
+  const ctx: RunContext = {
+    runner: sdkRunner(runDir),
+    storage,
+    createDriver: (label) => new PlaywrightDriver(cfg, { storage, label, headless, storageState: auth.storageState }),
+    log,
+    verbose: values.verbose,
+  };
   let totalCostUsd = 0;
   let reconSignals: Signal[] = [];
 
@@ -67,16 +88,16 @@ async function main(): Promise<void> {
       log(`Loaded plan with ${plan.charters.length} charters from ${values.plan}`);
     } else {
       log("Reconnaissance: mapping the application…");
-      const recon = await reconnoitre(cfg, { storageState: auth.storageState, screensDir: path.join(runDir, "screens"), headless, log });
+      const recon = await reconnoitre(cfg, ctx);
       reconSignals = recon.signals;
-      await writeFile(path.join(runDir, "sitemap.md"), recon.siteMap);
+      await storage.write("sitemap.md", recon.siteMap);
       log(`Planning ${cfg.run.sessions} charters from ${recon.pagesVisited} pages…`);
-      const planned = await createPlan(cfg, recon.siteMap, { cwd: runDir, log });
+      const planned = await createPlan(cfg, recon.siteMap, ctx);
       plan = planned.plan;
       totalCostUsd += planned.costUsd;
     }
-    await writeFile(path.join(runDir, "plan.json"), JSON.stringify(plan, null, 2));
-    await writeFile(path.join(runDir, "plan.md"), planToMarkdown(plan));
+    await storage.write("plan.json", JSON.stringify(plan, null, 2));
+    await storage.write("plan.md", planToMarkdown(plan));
     plan.charters.forEach((charter) => log(`  ${charter.id} [${charter.priority}] ${charter.title}`));
 
     if (values["plan-only"]) {
@@ -90,31 +111,27 @@ async function main(): Promise<void> {
       charters = charters.filter((charter) => wantedIds.has(charter.id));
     }
     log(`Running ${charters.length} session(s), ${cfg.run.concurrency} at a time…`);
-    const sessions = await pool(charters, cfg.run.concurrency, (charter) =>
-      runSession(cfg, charter, { runDir, storageState: auth.storageState, headless, verbose: values.verbose!, log }),
-    );
+    const sessions = await pool(charters, cfg.run.concurrency, (charter) => runSession(cfg, charter, ctx));
     totalCostUsd += sessions.reduce((sum, session) => sum + session.costUsd, 0);
 
     log("Triaging findings…");
     const autos = autoFindings([...reconSignals, ...sessions.flatMap((session) => session.signals)]);
-    const triaged = await triage(cfg, sessions, autos, { cwd: runDir, log });
+    const triaged = await triage(cfg, sessions, autos, ctx);
     totalCostUsd += triaged.costUsd;
 
-    await writeReports(
-      runDir,
-      {
-        cfg,
-        plan,
-        sessions,
-        issues: triaged.issues,
-        autos,
-        summary: triaged.summary,
-        totalCostUsd,
-        startedAt,
-        endedAt: new Date().toISOString(),
-      },
-      log,
-    );
+    const reports = renderReports({
+      cfg,
+      plan,
+      sessions,
+      issues: triaged.issues,
+      autos,
+      summary: triaged.summary,
+      totalCostUsd,
+      startedAt,
+      endedAt: new Date().toISOString(),
+    });
+    for (const [file, contents] of Object.entries(reports)) await storage.write(file, contents);
+    await renderPdf(path.join(runDir, "report.html"), path.join(runDir, "report.pdf")).catch((err) => log(`report.pdf skipped: ${errMsg(err)}`));
 
     const issueCountBySeverity = triaged.issues.reduce<Record<string, number>>((counts, issue) => {
       const key = issue.needsVerification ? "to verify" : issue.severity;

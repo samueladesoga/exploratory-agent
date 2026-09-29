@@ -1,12 +1,18 @@
+import {
+  PAGE_INFO_SCRIPT,
+  SafetyPolicy,
+  SignalBuffer,
+  firstLines,
+  slug,
+  stripQuery,
+  truncate,
+  type BrowserDriver,
+  type ClientConfig,
+  type PageInfo,
+  type RunStorage,
+  type Signal,
+} from "@exploratory-agent/core";
 import { chromium, errors, type Browser, type BrowserContext, type Locator, type Page, type Request, type Route } from "playwright";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { appOrigins, type ClientConfig } from "./config.js";
-import type { Signal } from "./types.js";
-import { firstLines, slug, stripQuery, truncate } from "./util.js";
-
-const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-const PASSTHROUGH_PROTOCOLS = new Set(["about:", "data:", "blob:", "javascript:"]);
 
 const ACTIONABILITY_PROBLEM = /intercepts pointer events|not visible|not enabled|not stable|outside of the viewport|not editable|detached/i;
 
@@ -20,48 +26,53 @@ function actionabilityReason(message: string): string | undefined {
   return reason ? truncate(reason, 200) : undefined;
 }
 
-export interface HarnessOptions {
-  screensDir: string;
+const SELECTOR_GUIDE = `Targets are Playwright selectors. Prefer, in order:
+  role=button[name="Save"]   role=link[name="Pricing"]   role=textbox[name="Email"]
+  text="Exact visible text"
+  css=input[name="email"]    css=[data-testid="submit"]
+Build them from the accessibility snapshot. If one fails, look at a fresh snapshot and adapt rather than retrying the same selector.
+A selector that matches more than one element fails with "strict mode violation" instead of silently acting on the first match — when two fields share a name (e.g. two date inputs both called "Select date"), add ">> nth=0" / ">> nth=1", or scope the selector to a container near a distinguishing label, rather than assuming DOM order.`;
+
+export interface PlaywrightDriverOptions {
+  storage: RunStorage;
   label: string;
   headless: boolean;
+  storageState?: string;
 }
 
-export class BrowserHarness {
+export class PlaywrightDriver implements BrowserDriver {
   page!: Page;
-  readonly signals: Signal[] = [];
+  readonly targetHint = 'Playwright selector, e.g. role=button[name="Save"], text="Sign in", css=#email';
+  readonly selectorGuide = SELECTOR_GUIDE;
 
   private browser?: Browser;
   private context?: BrowserContext;
   private ready = false;
-  private pendingSignals: Signal[] = [];
-  private pendingNotes: string[] = [];
   private blockedRequests = new WeakSet<Request>();
   private attachedPages = new WeakSet<Page>();
   private screenshotCount = 0;
   private inflightRequests = new Set<Request>();
-  private readonly allowedOrigins: Set<string>;
-  private readonly ignoredSignalPatterns: RegExp[];
-  private readonly blockRules: { method?: string; urlPattern: RegExp }[];
+  private readonly policy: SafetyPolicy;
+  private readonly buffer: SignalBuffer;
 
   constructor(
     private readonly cfg: ClientConfig,
-    private readonly opts: HarnessOptions,
+    private readonly opts: PlaywrightDriverOptions,
   ) {
-    this.allowedOrigins = appOrigins(cfg);
-    this.ignoredSignalPatterns = cfg.safety.ignoreSignals.map((pattern) => new RegExp(pattern, "i"));
-    this.blockRules = cfg.safety.blockedRequests.map((rule) => ({
-      method: rule.method?.toUpperCase(),
-      urlPattern: new RegExp(rule.urlPattern, "i"),
-    }));
+    this.policy = new SafetyPolicy(cfg);
+    this.buffer = new SignalBuffer(cfg, () => this.currentUrl());
   }
 
-  async start(storageState?: string): Promise<void> {
-    await mkdir(this.opts.screensDir, { recursive: true });
+  get signals(): Signal[] {
+    return this.buffer.signals;
+  }
+
+  async start(): Promise<void> {
     this.browser = await chromium.launch({ headless: this.opts.headless });
     this.context = await this.browser.newContext({
       viewport: this.cfg.browser.viewport,
       ignoreHTTPSErrors: this.cfg.browser.ignoreHttpsErrors,
-      storageState,
+      storageState: this.opts.storageState,
     });
     this.context.setDefaultTimeout(this.cfg.browser.actionTimeoutMs);
     this.context.setDefaultNavigationTimeout(this.cfg.browser.navigationTimeoutMs);
@@ -70,7 +81,7 @@ export class BrowserHarness {
       if (this.attachedPages.has(newPage)) return;
       this.attach(newPage);
       this.page = newPage;
-      if (this.ready) this.pendingNotes.push("A new tab/window opened; subsequent actions apply to it.");
+      if (this.ready) this.buffer.note("A new tab/window opened; subsequent actions apply to it.");
     });
     const firstPage = await this.context.newPage();
     if (!this.attachedPages.has(firstPage)) this.attach(firstPage);
@@ -83,21 +94,8 @@ export class BrowserHarness {
     await this.browser?.close().catch(() => {});
   }
 
-  isAllowed(url: string): boolean {
-    try {
-      const parsed = new URL(url);
-      return PASSTHROUGH_PROTOCOLS.has(parsed.protocol) || this.allowedOrigins.has(parsed.origin);
-    } catch {
-      return false;
-    }
-  }
-
   isAppUrl(url: string): boolean {
-    try {
-      return this.allowedOrigins.has(new URL(url).origin);
-    } catch {
-      return false;
-    }
+    return this.policy.isAppUrl(url);
   }
 
   currentUrl(): string {
@@ -120,36 +118,20 @@ export class BrowserHarness {
   private async guard(route: Route): Promise<void> {
     const request = route.request();
     const url = request.url();
-    const method = request.method().toUpperCase();
-    let reason: string | undefined;
-
-    if (this.isTopLevelNavigation(request) && !this.isAllowed(url)) {
-      reason = "navigation outside the allowed origins";
-    } else if (this.cfg.safety.blockMutations && MUTATING_METHODS.has(method) && this.isAppUrl(url)) {
-      reason = "mutating request blocked by safety.blockMutations";
-    } else {
-      const rule = this.blockRules.find((blockRule) => (!blockRule.method || blockRule.method === method) && blockRule.urlPattern.test(url));
-      if (rule) reason = `matches safety.blockedRequests /${rule.urlPattern.source}/`;
-    }
+    const method = request.method();
+    const reason = this.policy.blockReason(url, method, this.isTopLevelNavigation(request));
 
     if (!reason) {
       await route.continue().catch(() => {});
       return;
     }
     this.blockedRequests.add(request);
-    this.push({ kind: "blocked-request", message: `${method} ${stripQuery(url)} blocked: ${reason}`, url });
+    this.push({ kind: "blocked-request", message: this.policy.blockedMessage(url, method, reason), url });
     await route.abort("blockedbyclient").catch(() => {});
   }
 
   private push(signal: Omit<Signal, "timestamp" | "pageUrl"> & { pageUrl?: string }): void {
-    if (this.ignoredSignalPatterns.some((pattern) => pattern.test(signal.message) || (signal.url !== undefined && pattern.test(signal.url)))) {
-      return;
-    }
-    const record: Signal = { ...signal, pageUrl: signal.pageUrl ?? this.currentUrl(), timestamp: new Date().toISOString() };
-    this.signals.push(record);
-    if (!this.pendingSignals.some((pending) => pending.kind === record.kind && pending.message === record.message)) {
-      this.pendingSignals.push(record);
-    }
+    this.buffer.push(signal);
   }
 
   private attach(page: Page): void {
@@ -202,7 +184,7 @@ export class BrowserHarness {
 
     page.on("dialog", async (dialog) => {
       const accept = this.cfg.browser.acceptDialogs || dialog.type() === "alert" || dialog.type() === "beforeunload";
-      this.pendingNotes.push(
+      this.buffer.note(
         `A ${dialog.type()} dialog appeared: "${truncate(dialog.message(), 200)}" (${accept ? "accepted" : "dismissed"} automatically).`,
       );
       await (accept ? dialog.accept() : dialog.dismiss()).catch(() => {});
@@ -213,22 +195,13 @@ export class BrowserHarness {
       const openPages = this.context.pages().filter((candidate) => !candidate.isClosed());
       if (openPages.length) {
         this.page = openPages[openPages.length - 1];
-        this.pendingNotes.push("The active tab closed; switched to the remaining tab.");
+        this.buffer.note("The active tab closed; switched to the remaining tab.");
       }
     });
   }
 
   drainNew(): string {
-    const lines: string[] = this.pendingNotes.map((note) => `Note: ${note}`);
-    const pending = this.pendingSignals;
-    if (pending.length) {
-      lines.push("Runtime signals since last step:");
-      for (const signal of pending.slice(0, 10)) lines.push(`- [${signal.kind}] ${signal.message}`);
-      if (pending.length > 10) lines.push(`- …and ${pending.length - 10} more`);
-    }
-    this.pendingNotes = [];
-    this.pendingSignals = [];
-    return lines.join("\n");
+    return this.buffer.drain();
   }
 
   private resolve(url: string): string {
@@ -257,8 +230,8 @@ export class BrowserHarness {
 
   async navigate(url: string): Promise<void> {
     const absoluteUrl = this.resolve(url);
-    if (!this.isAllowed(absoluteUrl)) {
-      throw new Error(`${absoluteUrl} is outside the allowed origins (${[...this.allowedOrigins].join(", ")})`);
+    if (!this.policy.isAllowed(absoluteUrl)) {
+      throw new Error(`${absoluteUrl} is outside the allowed origins (${[...this.policy.allowedOrigins].join(", ")})`);
     }
     await this.page.goto(absoluteUrl, { waitUntil: "domcontentloaded" });
     await this.settle();
@@ -303,7 +276,7 @@ export class BrowserHarness {
       })
       .catch(() => "");
     await this.page.mouse.click(x, y);
-    this.pendingNotes.push(
+    this.buffer.note(
       `Standard click on ${target} was not actionable${why}; clicked its on-screen position with the mouse instead` +
         (hit ? `, where the topmost element is ${hit}, so the click may have landed on that instead.` : ".") +
         " Check the snapshot to confirm it took effect.",
@@ -375,8 +348,13 @@ export class BrowserHarness {
   async screenshot(label: string): Promise<{ file: string; base64: string }> {
     this.screenshotCount += 1;
     const name = `${this.opts.label}-${String(this.screenshotCount).padStart(3, "0")}-${slug(label, 30)}.jpg`;
+    const file = `screens/${name}`;
     const buffer = await this.page.screenshot({ type: "jpeg", quality: 60 });
-    await writeFile(path.join(this.opts.screensDir, name), buffer);
-    return { file: `screens/${name}`, base64: buffer.toString("base64") };
+    await this.opts.storage.write(file, buffer);
+    return { file, base64: buffer.toString("base64") };
+  }
+
+  async pageInfo(): Promise<PageInfo | null> {
+    return (await this.page.evaluate(PAGE_INFO_SCRIPT)) as PageInfo | null;
   }
 }

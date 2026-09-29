@@ -1,31 +1,15 @@
-import { query, type McpSdkServerConfigWithInstance, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { truncate, type Logger } from "./util.js";
+import { createSdkMcpServer, query, tool, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { truncate, type AgentRun, type AgentRunner, type AgentRunOptions } from "@exploratory-agent/core";
 
 const SERVER_KEY = "qa";
 
-export interface AgentRunOptions {
-  name: string;
-  systemPrompt: string;
-  prompt: string;
-  server: McpSdkServerConfigWithInstance;
-  toolNames: string[];
-  model: string;
-  maxTurns: number;
-  maxBudgetUsd?: number;
-  timeoutMinutes?: number;
-  cwd: string;
-  log: Logger;
-  verbose?: boolean;
+// Runs agents through the Claude Agent SDK, exposing the core tools as an in-process MCP server.
+// `cwd` is the run directory, used as the agent's working directory.
+export function sdkRunner(cwd: string): AgentRunner {
+  return { run: (options) => runAgent(options, cwd) };
 }
 
-export interface AgentRun {
-  stopReason: string;
-  resultText?: string;
-  costUsd: number;
-  turns: number;
-}
-
-export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
+async function runAgent(options: AgentRunOptions, cwd: string): Promise<AgentRun> {
   async function* input(): AsyncGenerator<SDKUserMessage> {
     yield {
       type: "user",
@@ -39,6 +23,11 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
     ? setTimeout(() => abortController.abort(), options.timeoutMinutes * 60_000)
     : undefined;
   const toolPrefix = `mcp__${SERVER_KEY}__`;
+  const server = createSdkMcpServer({
+    name: SERVER_KEY,
+    version: "1.0.0",
+    tools: options.tools.map((def) => tool(def.name, def.description, def.shape, (args) => def.handler(args))),
+  });
   let run: AgentRun = { stopReason: "no_result", costUsd: 0, turns: 0 };
 
   try {
@@ -49,14 +38,14 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
         model: options.model,
         maxTurns: options.maxTurns,
         maxBudgetUsd: options.maxBudgetUsd,
-        mcpServers: { [SERVER_KEY]: options.server },
+        mcpServers: { [SERVER_KEY]: server },
         strictMcpConfig: true,
         tools: [],
-        allowedTools: options.toolNames.map((toolName) => toolPrefix + toolName),
+        allowedTools: options.tools.map((def) => toolPrefix + def.name),
         canUseTool: async () => ({ behavior: "deny", message: "Only the provided testing tools are permitted." }),
         settingSources: [],
         persistSession: false,
-        cwd: options.cwd,
+        cwd,
         abortController,
       },
     });

@@ -1,6 +1,6 @@
 # Plan: Exploratory Agent as a Chromium extension
 
-Status: planned, not started (2026-09-29)
+Status: Phase 1 (core refactor) done; Phase 2 (spike) next. Updated 2026-09-29.
 
 ## Goal
 

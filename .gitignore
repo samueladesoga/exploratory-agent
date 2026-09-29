@@ -4,3 +4,4 @@ runs/
 *.auth.json
 .DS_Store
 .claude/settings.local.json
+packages/extension/dist/

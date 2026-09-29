@@ -1,30 +1,14 @@
-import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
-import { writeFile } from "node:fs/promises";
-import path from "node:path";
-import { runAgent } from "./agent.js";
-import { BrowserHarness } from "./browser.js";
 import type { ClientConfig } from "./config.js";
+import type { RunContext } from "./context.js";
 import { explorerPrompt, explorerSystem } from "./prompts.js";
-import { buildSessionTools, SESSION_TOOL_NAMES, type SessionState } from "./tools.js";
+import { buildSessionTools, type SessionState } from "./tools.js";
 import type { Charter, SessionResult } from "./types.js";
-import { errMsg, firstLines, type Logger } from "./util.js";
+import { errMsg, firstLines } from "./util.js";
 
-export interface SessionContext {
-  runDir: string;
-  storageState?: string;
-  headless: boolean;
-  verbose: boolean;
-  log: Logger;
-}
-
-export async function runSession(cfg: ClientConfig, charter: Charter, ctx: SessionContext): Promise<SessionResult> {
+export async function runSession(cfg: ClientConfig, charter: Charter, ctx: RunContext): Promise<SessionResult> {
   const sessionId = charter.id.replace(/^C/, "S");
   const startedAt = new Date().toISOString();
-  const browser = new BrowserHarness(cfg, {
-    screensDir: path.join(ctx.runDir, "screens"),
-    label: sessionId,
-    headless: ctx.headless,
-  });
+  const browser = ctx.createDriver(sessionId);
   const state: SessionState = {
     sessionId,
     charterId: charter.id,
@@ -44,7 +28,7 @@ export async function runSession(cfg: ClientConfig, charter: Charter, ctx: Sessi
   ctx.log(`${sessionId} ▶ ${charter.title}`);
 
   try {
-    await browser.start(ctx.storageState);
+    await browser.start();
     let startNote = "";
     try {
       await browser.navigate(charter.startUrl);
@@ -54,17 +38,15 @@ export async function runSession(cfg: ClientConfig, charter: Charter, ctx: Sessi
     const pending = browser.drainNew();
     const startSnapshot = `${startNote}${pending ? `${pending}\n\n` : ""}${await browser.snapshot(cfg.run.snapshotMaxChars)}`;
 
-    const run = await runAgent({
+    const run = await ctx.runner.run({
       name: sessionId,
-      systemPrompt: explorerSystem(cfg),
+      systemPrompt: explorerSystem(cfg, browser.selectorGuide),
       prompt: explorerPrompt(charter, startSnapshot),
-      server: createSdkMcpServer({ name: "qa", version: "1.0.0", tools: buildSessionTools(browser, state) }),
-      toolNames: SESSION_TOOL_NAMES,
+      tools: buildSessionTools(browser, state),
       model: cfg.run.explorerModel,
       maxTurns: charter.maxSteps + 20,
       maxBudgetUsd: cfg.run.maxBudgetUsdPerSession,
       timeoutMinutes: cfg.run.maxMinutesPerSession,
-      cwd: ctx.runDir,
       log: ctx.log,
       verbose: ctx.verbose,
     });
@@ -94,7 +76,7 @@ export async function runSession(cfg: ClientConfig, charter: Charter, ctx: Sessi
     costUsd,
     error,
   };
-  await writeFile(path.join(ctx.runDir, "sessions", `${sessionId}.json`), JSON.stringify(result, null, 2));
+  await ctx.storage.write(`sessions/${sessionId}.json`, JSON.stringify(result, null, 2));
   ctx.log(
     `${sessionId} ■ ${stopReason}: ${state.steps} steps, ${state.findings.length} findings, ` +
       `${result.signals.filter((signal) => signal.kind !== "blocked-request").length} runtime signals, $${costUsd.toFixed(2)}`,

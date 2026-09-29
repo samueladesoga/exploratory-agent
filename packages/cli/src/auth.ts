@@ -1,8 +1,7 @@
 import { chromium, type Locator, type Page } from "playwright";
 import { access } from "node:fs/promises";
 import path from "node:path";
-import type { ClientConfig } from "./config.js";
-import type { Logger } from "./util.js";
+import type { ClientConfig, Logger } from "@exploratory-agent/core";
 
 export interface AuthState {
   storageState?: string;
