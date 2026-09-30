@@ -2,6 +2,7 @@
   "name": "exploratory-agent",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Reusable Claude-powered exploratory testing harness for web applications",
   "type": "module",
   "workspaces": [
