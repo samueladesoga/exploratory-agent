@@ -7,3 +7,4 @@ runs/
 packages/extension/dist/
 packages/extension/test-results/
 packages/extension/*.zip
+packages/extension/store/assets/

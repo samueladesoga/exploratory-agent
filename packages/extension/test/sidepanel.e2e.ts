@@ -58,7 +58,7 @@ function fakeModel(body: Body): unknown {
   }
   apiCalls.push(`explorer:${turn}`);
   const lastUser = JSON.stringify(body.messages[body.messages.length - 1]);
-  const ref = /textbox \\"Quantity\\" \[ref=(e\d+)\]/.exec(JSON.stringify(body.messages))?.[1];
+  const ref = /spinbutton \\"Quantity\\" \[ref=(e\d+)\]/.exec(JSON.stringify(body.messages))?.[1];
   switch (turn) {
     case 0:
       return reply([{ type: "text", text: "I'll try a negative quantity." }, toolUse("fill", { target: ref, value: "-3" })]);

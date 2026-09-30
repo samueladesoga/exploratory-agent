@@ -8,10 +8,12 @@
     "build": "node build.mjs",
     "build:test": "node build.mjs --test-harness",
     "watch": "node build.mjs --watch",
-    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p test",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p test && tsc --noEmit -p store",
     "test": "node --import tsx --test \"test/**/*.test.ts\"",
     "test:e2e": "npm run build:test && node --import tsx --test \"test/**/*.e2e.ts\"",
-    "package": "npm run build && rm -f exploratory-agent-extension.zip && cd dist && zip -qr ../exploratory-agent-extension.zip . && cd .. && echo 'Wrote packages/extension/exploratory-agent-extension.zip'"
+    "package": "npm run build && rm -f exploratory-agent-extension.zip && cd dist && zip -qr ../exploratory-agent-extension.zip . && cd .. && echo 'Wrote packages/extension/exploratory-agent-extension.zip'",
+    "store:assets": "npm run build && node --import tsx store/make-assets.ts",
+    "store:video": "npm run build && node --import tsx store/make-video.ts"
   },
   "dependencies": {
     "@exploratory-agent/core": "*"

@@ -1,6 +1,6 @@
 # Plan: Exploratory Agent as a Chromium extension
 
-Status: Phases 1–4 and 6 built; Phase 5 prepared (store copy, privacy policy, icons, release zip) but not submitted. Updated 2026-09-29.
+Status: Phases 1–4 and 6 built; Phase 5 prepared (store copy, privacy policy, icons, release zip, store images and demo video) but not submitted. Updated 2026-09-30.
 
 ## Progress and changes from the original plan
 
@@ -10,7 +10,7 @@ Status: Phases 1–4 and 6 built; Phase 5 prepared (store copy, privacy policy, 
 | 2. Spike | Done | On saucedemo as problem_user, a real 16-step Quick run through the CDP driver and Messages API cost $0.22 and found 3 of the site's deliberate bugs. The CLI's comparable 19-step run cost $0.19 and found 2. |
 | 3. MVP | Done | Onboarding with key check, Quick mode, live feed, Stop, cost meter and cap, runtime signals, Summary view, Markdown and "Copy as issue", demo button. |
 | 4. QA layer | Done | Full mode (recon, plan review with edit and untick), Detailed view, CSV/JSON/HTML/print-to-PDF, YAML import and export, history. |
-| 5. Ship | Prepared | `packages/extension/store/` has the listing copy, permission justifications and privacy policy. Still needed: store screenshots, promo tile, demo video, developer account, and submission. |
+| 5. Ship | Prepared | `packages/extension/store/` has the listing copy, permission justifications and privacy policy, plus scripts that generate the store images and demo video (`npm run store:assets` and `npm run store:video`). Still needed: developer accounts, the YouTube upload, and submission. |
 | 6. Growth | Done | "Run again" (repeats exactly the charters that ran) and templates by app type. |
 
 What changed from the design below, and why:

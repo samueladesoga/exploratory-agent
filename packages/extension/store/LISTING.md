@@ -66,8 +66,11 @@ No. All code ships in the package. The extension sends page content to Anthropic
 
 Privacy policy: host `store/PRIVACY.md` at a public URL (for example the file's GitHub page) and paste that URL into the form.
 
-## Assets still needed
+## Images and video
 
-- Screenshots, 1280x800: the home view, a run in progress, the results summary and the full report. `npm run test:e2e -w @exploratory-agent/extension` writes panel screenshots to `packages/extension/test-results/` to start from.
-- Small promo tile, 440x280.
-- Optional: a 30–60 second demo video of "Try it on a demo shop".
+`npm run store:assets -w @exploratory-agent/extension` regenerates the images in `store/assets/`, and `npm run store:video -w @exploratory-agent/extension` records the video. Both drive the real extension against a local demo shop (`store/demo.ts`) with a scripted stand-in for the API, so they need no key and cost nothing. The folder is git-ignored: regenerate the files before each store update so they match the release.
+
+- Screenshots (1280x800, upload in this order): `screenshot-1-find-bugs.png`, `screenshot-2-live-run.png`, `screenshot-3-results.png`, `screenshot-4-report.png`, `screenshot-5-plan.png`.
+- Small promo tile (440x280): `promo-small-440x280.png`.
+- Marquee promo tile (1400x560, optional, used if the store features the extension): `marquee-1400x560.png`.
+- Demo video (1280x720, about 40 seconds, no audio): `demo.webm`. Upload it to YouTube (public or unlisted), and paste the YouTube URL into the store form.
