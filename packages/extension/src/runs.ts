@@ -33,6 +33,24 @@ export interface ActiveRun {
   record: RunRecord;
   stop(): void;
   readonly stopped: boolean;
+  // Why the run stopped, when something other than the user stopped it.
+  readonly stopReason?: string;
+}
+
+// The driver aborts with a message (a string) when the tab becomes unusable; the user's Stop aborts without one.
+const stopReason = (controller: AbortController) => (typeof controller.signal.reason === "string" ? controller.signal.reason : undefined);
+
+function activeRun(record: RunRecord, controller: AbortController): ActiveRun {
+  return {
+    record,
+    stop: () => controller.abort(),
+    get stopped() {
+      return controller.signal.aborted;
+    },
+    get stopReason() {
+      return stopReason(controller);
+    },
+  };
 }
 
 interface Setup {
@@ -48,7 +66,7 @@ function context(cfg: ClientConfig, record: RunRecord, setup: Setup, controller:
   return {
     runner: messagesApiRunner({ apiKey: setup.apiKey, browser: true }),
     storage,
-    createDriver: (label) => new CdpDriver(cfg, { storage, label, windowId: setup.windowId, onUserDetach: () => controller.abort() }),
+    createDriver: (label) => new CdpDriver(cfg, { storage, label, windowId: setup.windowId, onUserDetach: () => controller.abort(), onInputBlocked: (message) => controller.abort(message) }),
     log: (line) => {
       consoleLog(line);
       setup.handlers.onLog?.(line);
@@ -69,13 +87,14 @@ function newRecord(cfg: ClientConfig, mode: RunMode, extra: Partial<RunRecord> =
   return { id: newRunId(), createdAt: new Date().toISOString(), mode, status: "running", name: cfg.name, origin: new URL(cfg.baseUrl).origin, config: cfg, ...extra };
 }
 
-async function finish(record: RunRecord, report: RunReport, stopped: boolean): Promise<RunRecord> {
+async function finish(record: RunRecord, report: RunReport, controller: AbortController): Promise<RunRecord> {
   const storage = runStorage(record.id);
   for (const [file, contents] of Object.entries(renderReports(report))) await storage.write(file, contents);
   const toVerify = report.issues.filter((issue) => issue.needsVerification).length;
   const finished: RunRecord = {
     ...record,
-    status: stopped ? "stopped" : "done",
+    status: controller.signal.aborted ? "stopped" : "done",
+    error: stopReason(controller),
     totals: { issues: report.issues.length, confirmed: report.issues.length - toVerify, toVerify, autos: report.autos.length, costUsd: report.totalCostUsd },
   };
   await saveRun(finished);
@@ -92,12 +111,12 @@ export function startQuickRun(cfg: ClientConfig, pageUrl: string, pageTitle: str
   const controller = new AbortController();
   const plan = quickPlan(cfg, pageUrl, pageTitle);
   const record = newRecord(cfg, "quick", { plan, pageUrl });
-  const active: ActiveRun = { record, stop: () => controller.abort(), get stopped() { return controller.signal.aborted; } };
+  const active = activeRun(record, controller);
   const done = (async () => {
     await saveRun(record);
     try {
       const report = await executePlan(cfg, plan, plan.charters, context(cfg, record, setup, controller));
-      return { record: await finish(record, report, controller.signal.aborted), report };
+      return { record: await finish(record, report, controller), report };
     } catch (err) {
       return fail(record, err);
     }
@@ -116,7 +135,7 @@ export interface PlannedRun {
 export function startPlanning(cfg: ClientConfig, setup: Setup): { active: ActiveRun; done: Promise<PlannedRun> } {
   const controller = new AbortController();
   const record = newRecord(cfg, "full");
-  const active: ActiveRun = { record, stop: () => controller.abort(), get stopped() { return controller.signal.aborted; } };
+  const active = activeRun(record, controller);
   const done = (async () => {
     await saveRun(record);
     try {
@@ -148,13 +167,13 @@ export function startExecution(
 ): { active: ActiveRun; done: Promise<{ record: RunRecord; report: RunReport }> } {
   const controller = new AbortController();
   const record: RunRecord = prior.record ? { ...prior.record, status: "running", config: cfg, plan } : newRecord(cfg, "full", { plan });
-  const active: ActiveRun = { record, stop: () => controller.abort(), get stopped() { return controller.signal.aborted; } };
+  const active = activeRun(record, controller);
   const done = (async () => {
     await saveRun(record);
     try {
       const ctx = context(cfg, record, setup, controller, prior.planCostUsd ?? 0);
       const report = await executePlan(cfg, plan, charters, ctx, { priorSignals: prior.reconSignals, priorCostUsd: prior.planCostUsd });
-      return { record: await finish(record, report, controller.signal.aborted), report };
+      return { record: await finish(record, report, controller), report };
     } catch (err) {
       return fail(record, err);
     }

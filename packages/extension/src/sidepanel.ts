@@ -485,6 +485,7 @@ function runPlanning(cfg: ClientConfig): void {
   done
     .then((planned) => {
       activeRun = undefined;
+      if (active.stopReason) return showRunError(new Error(active.stopReason));
       if (active.stopped) return showHome();
       showPlanReview(cfg, planned);
     })
@@ -505,7 +506,7 @@ function runCharters(cfg: ClientConfig, charters: Charter[], planned: Partial<Pl
 function showRunError(err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
   const hint = /401|authentication|api key/i.test(message) ? " Check your API key in Settings." : /credit|billing|402/i.test(message) ? " Check your Anthropic billing." : "";
-  show(nav("test"), notice(`The run stopped with an error: ${message}.${hint}`, "error"), h("button", { class: "secondary", onclick: showHome }, "Back"));
+  show(nav("test"), notice(`The run stopped with an error: ${message.replace(/\.$/, "")}.${hint}`, "error"), h("button", { class: "secondary", onclick: showHome }, "Back"));
 }
 
 // ---- plan review -----------------------------------------------------------------------------------
@@ -611,6 +612,7 @@ function showResults(record: RunRecord, report: RunReport, detailed = settings.r
   show(
     nav("test"),
     h("div", { class: "row spread" }, h("h2", {}, record.status === "stopped" ? "Stopped early" : "Done"), toggle),
+    record.status === "stopped" && record.error ? notice(record.error, "warn") : "",
     h("div", { class: "counts" }, h("div", {}, h("b", {}, confirmed.length), "issues"), h("div", {}, h("b", {}, toVerify.length), "to verify"), h("div", {}, h("b", {}, report.autos.length), "runtime errors"), h("div", {}, h("b", {}, usd(report.totalCostUsd)), "cost")),
     h("ul", { class: "summary" }, report.summary.map((line) => h("li", {}, line))),
     h("h3", {}, detailed ? "All issues" : confirmed.length > 5 ? "Fix these first" : "Issues"),
