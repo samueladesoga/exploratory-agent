@@ -29,7 +29,18 @@ export interface CdpDriverOptions {
   windowId?: number;
   // Called if the user dismisses Chrome's "is debugging this browser" bar, which detaches the driver.
   onUserDetach?: () => void;
+  // Called if the tab stops receiving input (see INPUT_BLOCKED); the run can't continue.
+  onInputBlocked?: (message: string) => void;
 }
+
+// Chrome sometimes puts a tab-modal dialog over the page, for example "Change your password" after a
+// login with a password found in a data breach. The dialog swallows every click and keypress while
+// the page keeps running, so without a check clicks would silently do nothing.
+export const INPUT_BLOCKED =
+  "Chrome stopped passing clicks to the test tab. It's probably showing a dialog over the page, such as a \"Change your password\" warning after logging in. Close the dialog in the Exploratory Agent tab, then run again.";
+
+// Where click() records that the page received its mousedown.
+const RECEIVED = "__exploratoryAgentMouseDown";
 
 interface TabState {
   mainFrameId?: string;
@@ -394,6 +405,42 @@ export class CdpDriver implements BrowserDriver {
     await this.send("Input.dispatchMouseEvent", { type, x, y, button: "left", ...extra });
   }
 
+  // Clicks at (x, y) and reports whether the target's window saw the mousedown, wherever it landed.
+  // The flag is checked before the mouseup, so a click that navigates away can't hide it.
+  private async pressAndRelease(target: string, x: number, y: number): Promise<boolean> {
+    const { result } = await this.send<{ result: { objectId?: string } }>("Runtime.callFunctionOn", {
+      objectId: await this.objectId(target),
+      functionDeclaration: `function (key) {
+        const win = (this.ownerDocument || document).defaultView;
+        win[key] = false;
+        win.addEventListener("mousedown", () => (win[key] = true), { capture: true, once: true });
+        return win;
+      }`,
+      arguments: [{ value: RECEIVED }],
+    });
+    const received = async () => {
+      if (!result.objectId) return true;
+      const check = await this.send<{ result: { value?: boolean } }>("Runtime.callFunctionOn", {
+        objectId: result.objectId,
+        functionDeclaration: "function (key) { return this[key] !== false; }",
+        arguments: [{ value: RECEIVED }],
+        returnByValue: true,
+      }).catch(() => undefined);
+      // If the window is gone, the page navigated, so it did get the click.
+      return check?.result.value ?? true;
+    };
+    await this.mouse("mouseMoved", x, y, { button: "none" });
+    await this.mouse("mousePressed", x, y, { clickCount: 1 });
+    let ok = await received();
+    if (!ok) {
+      await sleep(250);
+      ok = await received();
+    }
+    await this.mouse("mouseReleased", x, y, { clickCount: 1 });
+    if (result.objectId) await this.send("Runtime.releaseObject", { objectId: result.objectId }).catch(() => {});
+    return ok;
+  }
+
   // ---- actions ---------------------------------------------------------------------------------
 
   async navigate(url: string): Promise<void> {
@@ -416,10 +463,16 @@ export class CdpDriver implements BrowserDriver {
   }
 
   async click(target: string): Promise<void> {
-    const { x, y, obstruction } = await this.centre(target);
-    await this.mouse("mouseMoved", x, y, { button: "none" });
-    await this.mouse("mousePressed", x, y, { clickCount: 1 });
-    await this.mouse("mouseReleased", x, y, { clickCount: 1 });
+    let { x, y, obstruction } = await this.centre(target);
+    // A mousedown can go missing once in a while (e.g. mid re-render), so try twice before giving up.
+    if (!(await this.pressAndRelease(target, x, y))) {
+      await sleep(500);
+      ({ x, y, obstruction } = await this.centre(target));
+      if (!(await this.pressAndRelease(target, x, y))) {
+        this.opts.onInputBlocked?.(INPUT_BLOCKED);
+        throw new Error(INPUT_BLOCKED);
+      }
+    }
     if (obstruction) {
       this.buffer.note(`${target} is covered at its centre by ${obstruction}, so the click may have landed on that instead. Check the snapshot to confirm it took effect.`);
     }

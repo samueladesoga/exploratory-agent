@@ -125,3 +125,30 @@ test("guardrails, dialogs, signals, popups and tricky inputs", async () => {
   assert.equal(result.popupUrl, `${origin}/popup`);
   assert.match(drained, /A new tab\/window opened/);
 });
+
+// Stands in for a Chrome dialog over the tab (e.g. "Change your password"), which swallows input.
+test("a tab that stops taking input fails the click and reports it", async () => {
+  const result = await harness.evaluate(async (baseUrl) => {
+    const { core, CdpDriver, storage } = (globalThis as any).harness;
+    const cfg = core.parseClientConfig({ name: "Fixture", baseUrl, description: "Fixture" }, "e2e");
+    const reported: string[] = [];
+    const driver = new CdpDriver(cfg, { storage, label: "S01", onInputBlocked: (message: string) => reported.push(message) });
+    await driver.start();
+    try {
+      await driver.navigate("/");
+      const snap = await driver.snapshot(20000);
+      const log = /button "Log error" \[ref=(e\d+)\]/.exec(snap)![1];
+      await driver.click(log);
+      const before = reported.length;
+      await driver.send("Input.setIgnoreInputEvents", { ignore: true });
+      const error = await driver.click(log).then(() => "", (err: Error) => err.message);
+      return { before, error, reported };
+    } finally {
+      await driver.close();
+    }
+  }, `${origin}/`);
+
+  assert.equal(result.before, 0, "a normal click isn't reported");
+  assert.match(result.error, /Chrome stopped passing clicks to the test tab/);
+  assert.deepEqual(result.reported, [result.error]);
+});
