@@ -2,6 +2,7 @@
   "name": "@exploratory-agent/core",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Platform-neutral exploratory testing pipeline shared by the CLI and the browser extension",
   "type": "module",
   "exports": {

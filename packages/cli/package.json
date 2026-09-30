@@ -2,6 +2,7 @@
   "name": "@exploratory-agent/cli",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Command-line exploratory testing harness: Playwright browsers driven by the Claude Agent SDK",
   "type": "module",
   "scripts": {
