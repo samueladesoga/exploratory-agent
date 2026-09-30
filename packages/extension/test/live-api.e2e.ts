@@ -2,19 +2,19 @@
 // problem_user, which the site deliberately breaks. Spends real API credit, so it only runs when
 // RUN_PAID_TESTS=1 and ANTHROPIC_API_KEY are set (the nightly workflow, or by hand).
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { saucedemoProfile } from "./profile.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.resolve(here, "../dist");
 const enabled = process.env.RUN_PAID_TESTS === "1" && Boolean(process.env.ANTHROPIC_API_KEY);
 
 test("finds saucedemo's known bugs with the real API", { skip: !enabled && "set RUN_PAID_TESTS=1 and ANTHROPIC_API_KEY", timeout: 15 * 60_000 }, async () => {
-  const profile = await mkdtemp(path.join(os.tmpdir(), "ea-live-"));
+  const profile = await saucedemoProfile("ea-live-");
   const context = await chromium.launchPersistentContext(profile, { channel: "chromium", headless: true, args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`] });
   try {
     const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));

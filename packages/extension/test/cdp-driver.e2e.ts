@@ -1,12 +1,12 @@
 // Loads the built extension (npm run build:test) into Chromium and drives saucedemo.com through the
 // CDP driver from the test-only harness page. Needs network access; no API key or model calls.
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, type BrowserContext, type Page } from "playwright";
+import { saucedemoProfile } from "./profile.js";
 
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 let context: BrowserContext;
@@ -14,7 +14,7 @@ let harness: Page;
 let profile: string;
 
 before(async () => {
-  profile = await mkdtemp(path.join(os.tmpdir(), "ea-e2e-"));
+  profile = await saucedemoProfile("ea-e2e-");
   context = await chromium.launchPersistentContext(profile, {
     channel: "chromium",
     headless: true,
