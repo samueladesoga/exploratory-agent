@@ -1,6 +1,6 @@
 {
   "name": "@exploratory-agent/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Platform-neutral exploratory testing pipeline shared by the CLI and the browser extension",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@exploratory-agent/extension",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Chromium extension: exploratory testing of the current site from a side panel",
   "type": "module",

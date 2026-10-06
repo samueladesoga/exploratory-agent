@@ -1,6 +1,6 @@
 {
   "name": "@exploratory-agent/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Command-line exploratory testing harness: Playwright browsers driven by the Claude Agent SDK",
   "type": "module",

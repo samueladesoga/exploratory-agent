@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Exploratory Agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An AI exploratory tester for the site you're on. Bring your own Anthropic API key.",
   "minimum_chrome_version": "120",
   "action": {
