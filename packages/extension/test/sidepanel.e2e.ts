@@ -199,6 +199,13 @@ test("QA flow: plan, review charters, run, detailed results, run again", async (
 
   await panel.getByRole("button", { name: "Settings" }).click();
   await panel.getByLabel(/QA tester/).check();
+  // This browser hasn't allowed the extension in incognito, so the private-window option says how.
+  await panel.getByLabel(/Run tests in a private window/).check();
+  await panel.getByText(/hasn't allowed Exploratory Agent in private windows/).waitFor();
+  assert.equal(await panel.getByRole("button", { name: "Open the extension's page" }).count(), 1);
+  await panel.screenshot({ path: path.join(shots, "10-settings-private-window.png"), fullPage: true });
+  await panel.getByLabel(/Run tests in a private window/).uncheck();
+  assert.equal(await panel.getByText(/hasn't allowed Exploratory Agent in private windows/).count(), 0);
   await panel.getByRole("button", { name: "Test", exact: true }).click();
   // QA users see "Plan a session" first.
   const headings = await panel.locator("section.card h2").allInnerTexts();

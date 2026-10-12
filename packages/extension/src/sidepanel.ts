@@ -13,6 +13,7 @@ import {
   type RunReport,
 } from "@exploratory-agent/core";
 import { deleteRun, getFile, listRuns, type RunRecord } from "./db.js";
+import { INCOGNITO_NOT_ALLOWED } from "./cdp-driver.js";
 import { DEMO_CONFIG, demoLogin, startExecution, startPlanning, startQuickRun, type ActiveRun, type PlannedRun } from "./runs.js";
 import { loadSettings, PRESETS, saveSettings, type ModelPreset, type Role, type Settings } from "./settings.js";
 import { TEMPLATES } from "./templates.js";
@@ -256,9 +257,13 @@ async function runDemo(): Promise<void> {
   );
   show(nav("test"), h("section", { class: "card" }, h("h2", {}, "Logging in to the demo shop…"), h("p", { class: "muted" }, "saucedemo.com is a public practice site with deliberate bugs.")));
   try {
-    await demoLogin(cfg, windowId);
+    await demoLogin(cfg, placement(cfg));
     runQuick(cfg, "https://www.saucedemo.com/inventory.html", "Swag Labs products");
   } catch (err) {
+    if (err instanceof Error && err.message === INCOGNITO_NOT_ALLOWED) {
+      show(nav("test"), notice(DEMO_NEEDS_INCOGNITO, "warn"), extensionPageButton());
+      return;
+    }
     show(nav("test"), notice(`The demo couldn't start: ${err instanceof Error ? err.message : String(err)}`, "error"));
   }
 }
@@ -465,14 +470,20 @@ function liveView(title: string, capUsd: number): LiveView {
   };
 }
 
-function setup(view: LiveView) {
-  return { apiKey: settings.apiKey, windowId, handlers: { onLog: view.onLog, onAction: view.onAction, onFinding: view.onFinding, onCost: view.onCost } };
+// The demo always uses the private window: its public password is in data breaches, so Chrome would
+// cover the page with its "Change your password" dialog after the login.
+function placement(cfg: ClientConfig) {
+  return { windowId, incognito: settings.privateWindow || cfg.name === DEMO_CONFIG.name };
+}
+
+function setup(cfg: ClientConfig, view: LiveView) {
+  return { apiKey: settings.apiKey, ...placement(cfg), handlers: { onLog: view.onLog, onAction: view.onAction, onFinding: view.onFinding, onCost: view.onCost } };
 }
 
 function runQuick(cfg: ClientConfig, pageUrl: string, title: string): void {
   const view = liveView(`Testing ${new URL(pageUrl).host}`, cfg.run.maxBudgetUsdPerSession ?? settings.sessionCapUsd);
   show(view.el);
-  const { active, done } = startQuickRun(cfg, pageUrl, title, setup(view));
+  const { active, done } = startQuickRun(cfg, pageUrl, title, setup(cfg, view));
   activeRun = active;
   done.then(({ record, report }) => showResults(record, report)).catch(showRunError).finally(() => (activeRun = undefined));
 }
@@ -480,7 +491,7 @@ function runQuick(cfg: ClientConfig, pageUrl: string, title: string): void {
 function runPlanning(cfg: ClientConfig): void {
   const view = liveView(`Planning ${cfg.name}`, cfg.run.maxBudgetUsdPerSession ?? settings.sessionCapUsd);
   show(view.el);
-  const { active, done } = startPlanning(cfg, setup(view));
+  const { active, done } = startPlanning(cfg, setup(cfg, view));
   activeRun = active;
   done
     .then((planned) => {
@@ -498,7 +509,7 @@ function runPlanning(cfg: ClientConfig): void {
 function runCharters(cfg: ClientConfig, charters: Charter[], planned: Partial<PlannedRun> & { plan: NonNullable<RunRecord["plan"]> }): void {
   const view = liveView(`Running ${charters.length} session${charters.length === 1 ? "" : "s"}`, cfg.run.maxBudgetUsdPerSession ?? settings.sessionCapUsd);
   show(view.el);
-  const { active, done } = startExecution(cfg, planned.plan, charters, setup(view), planned);
+  const { active, done } = startExecution(cfg, planned.plan, charters, setup(cfg, view), planned);
   activeRun = active;
   done.then(({ record, report }) => showResults(record, report)).catch(showRunError).finally(() => (activeRun = undefined));
 }
@@ -644,7 +655,7 @@ async function loadReport(runId: string): Promise<RunReport | undefined> {
 async function runAgain(record: RunRecord): Promise<void> {
   if (!record.plan) return;
   if (record.mode === "quick" && record.pageUrl) {
-    if (record.config.name === DEMO_CONFIG.name) await demoLogin(record.config, windowId).catch(() => {});
+    if (record.config.name === DEMO_CONFIG.name) await demoLogin(record.config, placement(record.config)).catch(() => {});
     runQuick(record.config, record.pageUrl, record.plan.charters[0]?.area ?? "");
   } else {
     runCharters(record.config, record.plan.charters, { plan: record.plan });
@@ -720,6 +731,7 @@ function showSettings(): void {
       (Object.keys(PRESETS) as ModelPreset[]).map((preset) => radio<ModelPreset>("preset", preset, settings.preset, PRESETS[preset].label, PRESETS[preset].description, async (value) => (settings = await saveSettings({ preset: value })))),
       h("div", { class: "field" }, h("label", { for: "cap" }, "Hard cap per session (USD)"), cap),
     ),
+    privateWindowCard(),
     h(
       "section",
       { class: "card" },
@@ -734,6 +746,42 @@ function showSettings(): void {
           )
         : h("p", { class: "muted" }, "None yet."),
     ),
+  );
+}
+
+const DEMO_NEEDS_INCOGNITO =
+  "The demo runs in a private window, because the demo shop's public password is in data breaches and Chrome would cover the page with a \"Change your password\" warning. Turn on \"Allow in Incognito\" on the extension's page, then try the demo again.";
+
+function extensionPageButton(): HTMLElement {
+  return h("button", { class: "secondary", onclick: () => chrome.tabs.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` }) }, "Open the extension's page");
+}
+
+function privateWindowCard(): HTMLElement {
+  const warning = h("div", {});
+  const checkAccess = async () => {
+    warning.replaceChildren();
+    if (!settings.privateWindow || (await chrome.extension.isAllowedIncognitoAccess())) return;
+    warning.append(
+      notice(INCOGNITO_NOT_ALLOWED, "warn"),
+      extensionPageButton(),
+    );
+  };
+  const box = h("input", {
+    type: "checkbox",
+    checked: settings.privateWindow,
+    onchange: async () => {
+      settings = await saveSettings({ privateWindow: box.checked });
+      await checkAccess();
+    },
+  });
+  void checkAccess();
+  return h(
+    "section",
+    { class: "card" },
+    h("h2", {}, "Test tab"),
+    h("label", { class: "check" }, box, h("span", {}, h("strong", {}, "Run tests in a private window"), " · Chrome won't show its \"Change your password\" warning there, which blocks the agent's clicks after it logs in with a password found in a data breach.")),
+    h("p", { class: "fine" }, "The private window starts logged out and stays open between runs, so you can log in there once yourself. Needs \"Allow in Incognito\" on the extension's page."),
+    warning,
   );
 }
 

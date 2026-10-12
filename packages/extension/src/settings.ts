@@ -12,9 +12,11 @@ export interface Settings {
   sessionCapUsd: number;
   // Origins the user confirmed they own or may test.
   authorizedOrigins: string[];
+  // Open test tabs in an incognito window, where Chrome doesn't show its breached-password dialog.
+  privateWindow: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { apiKey: "", preset: "balanced", sessionCapUsd: 1, authorizedOrigins: [] };
+export const DEFAULT_SETTINGS: Settings = { apiKey: "", preset: "balanced", sessionCapUsd: 1, authorizedOrigins: [], privateWindow: false };
 
 // Planner/triage model and explorer model for each preset.
 export const PRESETS: Record<ModelPreset, { label: string; description: string; plannerModel: string; explorerModel: string }> = {

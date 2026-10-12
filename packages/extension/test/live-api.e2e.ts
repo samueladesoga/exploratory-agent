@@ -8,6 +8,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { allowIncognito } from "./incognito.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.resolve(here, "../dist");
@@ -18,8 +19,11 @@ test("finds saucedemo's known bugs with the real API", { skip: !enabled && "set 
   const context = await chromium.launchPersistentContext(profile, { channel: "chromium", headless: true, args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`] });
   try {
     const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
+    const extensionId = new URL(worker.url()).host;
+    // saucedemo's password is in data breaches, so the run uses the private window, as the demo does.
+    await allowIncognito(context, extensionId);
     const harness = await context.newPage();
-    await harness.goto(`chrome-extension://${new URL(worker.url()).host}/harness.html`);
+    await harness.goto(`chrome-extension://${extensionId}/harness.html`);
     await harness.waitForFunction(() => document.title === "harness ready");
     harness.on("console", (message) => console.log(`  ${message.text()}`));
 
@@ -35,7 +39,7 @@ test("finds saucedemo's known bugs with the real API", { skip: !enabled && "set 
         },
         "live",
       );
-      const login = new CdpDriver(cfg, { storage, label: "login" });
+      const login = new CdpDriver(cfg, { storage, label: "login", incognito: true });
       await login.start();
       await login.navigate("/");
       const snap = await login.snapshot(20000);
@@ -48,7 +52,7 @@ test("finds saucedemo's known bugs with the real API", { skip: !enabled && "set 
       const ctx = {
         runner: core.messagesApiRunner({ apiKey, browser: true }),
         storage,
-        createDriver: (label: string) => new CdpDriver(cfg, { storage, label }),
+        createDriver: (label: string) => new CdpDriver(cfg, { storage, label, incognito: true }),
         log: (line: string) => console.log(line),
       };
       const plan = core.quickPlan(cfg, "https://www.saucedemo.com/inventory.html", "Products");

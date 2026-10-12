@@ -27,6 +27,8 @@ export interface CdpDriverOptions {
   label: string;
   // The window to open the testing tab in (the side panel's window).
   windowId?: number;
+  // Open the testing tab in the private window instead (see privateWindow).
+  incognito?: boolean;
   // Called if the user dismisses Chrome's "is debugging this browser" bar, which detaches the driver.
   onUserDetach?: () => void;
   // Called if the tab stops receiving input (see INPUT_BLOCKED); the run can't continue.
@@ -37,7 +39,26 @@ export interface CdpDriverOptions {
 // login with a password found in a data breach. The dialog swallows every click and keypress while
 // the page keeps running, so without a check clicks would silently do nothing.
 export const INPUT_BLOCKED =
-  "Chrome stopped passing clicks to the test tab. It's probably showing a dialog over the page, such as a \"Change your password\" warning after logging in. Close the dialog in the Exploratory Agent tab, then run again.";
+  "Chrome stopped passing clicks to the test tab. It's probably showing a dialog over the page, such as a \"Change your password\" warning after logging in. Close the dialog in the Exploratory Agent tab, then run again. To stop Chrome showing that warning, turn on \"Run tests in a private window\" in Settings.";
+
+export const INCOGNITO_NOT_ALLOWED =
+  "Chrome hasn't allowed Exploratory Agent in private windows. Turn on \"Allow in Incognito\" on the extension's page in chrome://extensions, or turn off \"Run tests in a private window\" in Settings.";
+
+// Chrome doesn't check passwords against data breaches in incognito windows, so the "Change your
+// password" dialog never appears there. Runs share one private window, kept open between runs so a
+// login there carries over (Chrome discards incognito cookies once every incognito window closes).
+// Its id is kept in session storage so a reopened side panel finds it again.
+export async function privateWindow(): Promise<number> {
+  if (!(await chrome.extension.isAllowedIncognitoAccess())) throw new Error(INCOGNITO_NOT_ALLOWED);
+  const { privateWindowId } = (await chrome.storage.session.get("privateWindowId")) as { privateWindowId?: number };
+  if (privateWindowId !== undefined) {
+    const existing = await chrome.windows.get(privateWindowId).catch(() => undefined);
+    if (existing?.incognito) return privateWindowId;
+  }
+  const created = (await chrome.windows.create({ incognito: true, url: "about:blank" }))!;
+  await chrome.storage.session.set({ privateWindowId: created.id });
+  return created.id!;
+}
 
 // Where click() records that the page received its mousedown.
 const RECEIVED = "__exploratoryAgentMouseDown";
@@ -90,7 +111,8 @@ export class CdpDriver implements BrowserDriver {
     chrome.debugger.onDetach.addListener(this.onDetach);
     chrome.tabs.onCreated.addListener(this.onTabCreated);
     chrome.tabs.onRemoved.addListener(this.onTabRemoved);
-    const tab = await chrome.tabs.create({ url: "about:blank", active: true, windowId: this.opts.windowId });
+    const windowId = this.opts.incognito ? await privateWindow() : this.opts.windowId;
+    const tab = await chrome.tabs.create({ url: "about:blank", active: true, windowId });
     this.ownedTabs.add(tab.id!);
     await this.groupTab(tab.id!);
     this.url = await this.attach(tab.id!);
