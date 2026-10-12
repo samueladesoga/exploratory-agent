@@ -82,6 +82,9 @@ test("guardrails, dialogs, signals, popups and tricky inputs", async () => {
       await driver.fill(ref(snap, /textbox "Name"/), "Zoë 🚀");
       await driver.click(ref(snap, /button "Save"/));
       out.afterSaveUrl = driver.currentUrl();
+      // Going back from the blocked POST loaded the page again, so refs from before are stale.
+      out.staleAfterReload = await driver.click(ref(snap, /button "Delete all"/)).catch((err: Error) => err.message);
+      snap = await driver.snapshot(20000);
 
       await driver.click(ref(snap, /button "Delete all"/));
       out.dialogOutcome = /text: "kept"/.test(await driver.snapshot(20000));
@@ -115,6 +118,7 @@ test("guardrails, dialogs, signals, popups and tricky inputs", async () => {
   const drained = String(result.drained);
   assert.equal(result.afterSaveUrl, `${origin}/`, "the blocked POST must not navigate away");
   assert.ok(signals.some((signal) => signal === `blocked-request: POST ${origin}/save blocked: mutating request blocked by safety.blockMutations`), signals.join("\n"));
+  assert.match(String(result.staleAfterReload), /no longer on the page/);
   assert.equal(result.dialogOutcome, true, "confirm() is dismissed");
   assert.ok(signals.some((signal) => /^page-error: ReferenceError: undefinedFunction is not defined/.test(signal)), signals.join("\n"));
   assert.ok(signals.includes("console-error: Checkout total is NaN"), signals.join("\n"));

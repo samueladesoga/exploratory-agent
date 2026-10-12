@@ -87,6 +87,10 @@ export class CdpDriver implements BrowserDriver {
   // Set when the guard blocks a top-level navigation; Chrome then shows its own error page.
   private blockedNavigation?: string;
   private loadCount = 0;
+  // Refs are backend node ids, which a new document (or another tab) can reuse for a different
+  // element. Counts documents in the active tab, so refs from an earlier one are rejected as stale.
+  private documentCount = 0;
+  private refsDocument?: number;
   private readonly requests = new Map<string, { url: string; method: string }>();
   private readonly blockedUrls = new Set<string>();
   private readonly policy: SafetyPolicy;
@@ -177,6 +181,7 @@ export class CdpDriver implements BrowserDriver {
     void this.attach(tab.id)
       .then((url) => {
         this.tabId = tab.id;
+        this.documentCount += 1;
         this.mainFrameLoading = false;
         this.url = url && url !== "about:blank" ? url : (tab.pendingUrl ?? tab.url ?? url);
         this.buffer.note("A new tab/window opened; subsequent actions apply to it.");
@@ -191,6 +196,7 @@ export class CdpDriver implements BrowserDriver {
     if (tabId !== this.tabId) return;
     const remaining = [...this.tabs.keys()];
     this.tabId = remaining[remaining.length - 1];
+    this.documentCount += 1;
     if (this.tabId !== undefined) this.buffer.note("The active tab closed; switched to the remaining tab.");
   };
 
@@ -204,7 +210,10 @@ export class CdpDriver implements BrowserDriver {
         void this.guard(tabId, p);
         break;
       case "Page.frameNavigated":
-        if (tabId === this.tabId && !p.frame.parentId) this.url = p.frame.url;
+        if (tabId === this.tabId && !p.frame.parentId) {
+          this.url = p.frame.url;
+          this.documentCount += 1;
+        }
         break;
       case "Page.frameStartedLoading":
         if (tabId === this.tabId && p.frameId === this.tabs.get(tabId)?.mainFrameId) this.mainFrameLoading = true;
@@ -362,11 +371,12 @@ export class CdpDriver implements BrowserDriver {
   }
 
   private async objectId(target: string): Promise<string> {
+    const backendNodeId = this.backendNodeId(target);
     try {
-      const { object } = await this.send<{ object: { objectId: string } }>("DOM.resolveNode", { backendNodeId: this.backendNodeId(target) });
+      if (this.refsDocument !== this.documentCount) throw new Error("ref from an earlier document");
+      const { object } = await this.send<{ object: { objectId: string } }>("DOM.resolveNode", { backendNodeId });
       return object.objectId;
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("not an element ref")) throw err;
+    } catch {
       throw new Error(`Element ${target} is no longer on the page. Use a ref from the latest snapshot.`);
     }
   }
@@ -609,6 +619,7 @@ export class CdpDriver implements BrowserDriver {
     const title = await this.evaluate<string>("document.title").catch(() => "");
     const viewport = this.viewport ?? (await this.evaluate<{ width: number; height: number }>("({ width: innerWidth, height: innerHeight })").catch(() => undefined));
     let tree: string;
+    this.refsDocument = this.documentCount;
     try {
       const { nodes } = await this.send<{ nodes: AxNode[] }>("Accessibility.getFullAXTree");
       tree = formatAxTree(nodes);
