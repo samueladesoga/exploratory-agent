@@ -174,3 +174,7 @@ RUN_PAID_TESTS=1 npm run test:e2e -w @exploratory-agent/extension   # also a rea
 CI runs the free checks on every push and pull request. `.github/workflows/nightly.yml` runs both apps against saucedemo with the real API every night, but only after you add an `ANTHROPIC_API_KEY` repository secret.
 
 New pipeline features go in `core` first, then each app exposes them.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

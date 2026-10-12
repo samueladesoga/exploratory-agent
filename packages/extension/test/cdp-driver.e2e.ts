@@ -15,6 +15,7 @@ let harness: Page;
 let profile: string;
 
 before(async () => {
+  // A normal profile, with Chrome's breach check on: the private window is what avoids its dialog.
   profile = await mkdtemp(path.join(os.tmpdir(), "ea-e2e-"));
   context = await chromium.launchPersistentContext(profile, {
     channel: "chromium",
