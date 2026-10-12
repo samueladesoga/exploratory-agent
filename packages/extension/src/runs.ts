@@ -53,9 +53,14 @@ function activeRun(record: RunRecord, controller: AbortController): ActiveRun {
   };
 }
 
-interface Setup {
-  apiKey: string;
+// Where test tabs open: the side panel's window, or the private window.
+export interface TabPlacement {
   windowId?: number;
+  incognito?: boolean;
+}
+
+interface Setup extends TabPlacement {
+  apiKey: string;
   handlers: RunHandlers;
 }
 
@@ -66,7 +71,7 @@ function context(cfg: ClientConfig, record: RunRecord, setup: Setup, controller:
   return {
     runner: messagesApiRunner({ apiKey: setup.apiKey, browser: true }),
     storage,
-    createDriver: (label) => new CdpDriver(cfg, { storage, label, windowId: setup.windowId, onUserDetach: () => controller.abort(), onInputBlocked: (message) => controller.abort(message) }),
+    createDriver: (label) => new CdpDriver(cfg, { storage, label, windowId: setup.windowId, incognito: setup.incognito, onUserDetach: () => controller.abort(), onInputBlocked: (message) => controller.abort(message) }),
     log: (line) => {
       consoleLog(line);
       setup.handlers.onLog?.(line);
@@ -183,8 +188,8 @@ export function startExecution(
 
 // The demo: log in to saucedemo.com as its deliberately buggy "problem_user" (public demo
 // credentials printed on its login page), in the tab group the runs use.
-export async function demoLogin(cfg: ClientConfig, windowId?: number): Promise<void> {
-  const driver = new CdpDriver(cfg, { storage: { write: async () => {} }, label: "demo", windowId });
+export async function demoLogin(cfg: ClientConfig, placement: TabPlacement): Promise<void> {
+  const driver = new CdpDriver(cfg, { storage: { write: async () => {} }, label: "demo", ...placement });
   await driver.start();
   try {
     await driver.navigate("https://www.saucedemo.com/");

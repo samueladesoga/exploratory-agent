@@ -1,12 +1,13 @@
 // Loads the built extension (npm run build:test) into Chromium and drives saucedemo.com through the
 // CDP driver from the test-only harness page. Needs network access; no API key or model calls.
 import assert from "node:assert/strict";
-import { rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, type BrowserContext, type Page } from "playwright";
-import { saucedemoProfile } from "./profile.js";
+import { allowIncognito } from "./incognito.js";
 
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 let context: BrowserContext;
@@ -14,7 +15,8 @@ let harness: Page;
 let profile: string;
 
 before(async () => {
-  profile = await saucedemoProfile("ea-e2e-");
+  // A normal profile, with Chrome's breach check on: the private window is what avoids its dialog.
+  profile = await mkdtemp(path.join(os.tmpdir(), "ea-e2e-"));
   context = await chromium.launchPersistentContext(profile, {
     channel: "chromium",
     headless: true,
@@ -22,6 +24,7 @@ before(async () => {
   });
   const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
   const extensionId = new URL(worker.url()).host;
+  await allowIncognito(context, extensionId);
   harness = await context.newPage();
   await harness.goto(`chrome-extension://${extensionId}/harness.html`);
   await harness.waitForFunction(() => document.title === "harness ready");
@@ -32,11 +35,13 @@ after(async () => {
   await rm(profile, { recursive: true, force: true });
 });
 
+// Runs in the private window: saucedemo's password is in public data breaches, so in a normal window
+// Chrome covers the page with its "Change your password" dialog after the login.
 test("drives saucedemo: refs, typing, clicks, selects, guardrails and signals", async () => {
   const result = await harness.evaluate(async () => {
     const { core, CdpDriver, storage, files } = (globalThis as any).harness;
     const cfg = core.parseClientConfig({ name: "Sauce", baseUrl: "https://www.saucedemo.com/", description: "Demo shop" }, "e2e");
-    const driver = new CdpDriver(cfg, { storage, label: "S01" });
+    const driver = new CdpDriver(cfg, { storage, label: "S01", incognito: true });
     const refFor = (snapshot: string, pattern: RegExp) => {
       const line = snapshot.split("\n").find((candidate: string) => pattern.test(candidate));
       const match = line && /\[ref=(e\d+)\]/.exec(line);
@@ -46,6 +51,7 @@ test("drives saucedemo: refs, typing, clicks, selects, guardrails and signals", 
     const out: Record<string, unknown> = {};
     await driver.start();
     try {
+      out.incognito = (await chrome.tabs.get(driver.tabId)).incognito;
       await driver.navigate("/");
       let snap = await driver.snapshot(20000);
       out.loginSnapshot = snap.slice(0, 1500);
@@ -106,6 +112,7 @@ test("drives saucedemo: refs, typing, clicks, selects, guardrails and signals", 
     return out;
   });
 
+  assert.equal(result.incognito, true);
   assert.equal(result.afterLoginUrl, "https://www.saucedemo.com/inventory.html", String(result.loginSnapshot));
   assert.equal(result.hasProducts, true);
   assert.equal(result.cartBadge, true, `Driver notes: ${result.clickNotes || "(none)"}\n${String(result.cartSnapshot).slice(0, 2500)}`);
