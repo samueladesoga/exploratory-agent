@@ -16,7 +16,10 @@ export interface RunRecord {
   plan?: TestPlan;
   // The page Quick mode started on.
   pageUrl?: string;
-  totals?: { issues: number; confirmed: number; toVerify: number; autos: number; costUsd: number };
+  // Follow-up runs: the id of the earlier run whose gaps this one targets.
+  followUpOf?: string;
+  // gaps: sessions that left part of their charter uncovered (missing on runs saved before follow-ups existed).
+  totals?: { issues: number; confirmed: number; toVerify: number; autos: number; costUsd: number; gaps?: number };
   error?: string;
 }
 

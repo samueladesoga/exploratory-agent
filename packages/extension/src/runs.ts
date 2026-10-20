@@ -2,6 +2,8 @@
 // API runner for agents, and IndexedDB for artifacts. The side panel must stay open during a run,
 // because chrome.debugger is only available to extension pages (not offscreen documents).
 import {
+  coverageGaps,
+  createFollowUpPlan,
   createPlan,
   executePlan,
   makeLogger,
@@ -18,9 +20,10 @@ import {
   type RunReport,
   type Signal,
   type TestPlan,
+  withPriorIssues,
 } from "@exploratory-agent/core";
 import { CdpDriver } from "./cdp-driver.js";
-import { newRunId, runStorage, saveRun, type RunMode, type RunRecord } from "./db.js";
+import { deleteRun, getFile, newRunId, runStorage, saveRun, type RunMode, type RunRecord } from "./db.js";
 
 export interface RunHandlers {
   onLog?(line: string): void;
@@ -100,7 +103,7 @@ async function finish(record: RunRecord, report: RunReport, controller: AbortCon
     ...record,
     status: controller.signal.aborted ? "stopped" : "done",
     error: stopReason(controller),
-    totals: { issues: report.issues.length, confirmed: report.issues.length - toVerify, toVerify, autos: report.autos.length, costUsd: report.totalCostUsd },
+    totals: { issues: report.issues.length, confirmed: report.issues.length - toVerify, toVerify, autos: report.autos.length, costUsd: report.totalCostUsd, gaps: coverageGaps(report.sessions).length },
   };
   await saveRun(finished);
   return finished;
@@ -155,6 +158,41 @@ export function startPlanning(cfg: ClientConfig, setup: Setup): { active: Active
       const planned = { ...record, plan };
       await saveRun(planned);
       return { record: planned, plan, reconSignals: recon.signals, planCostUsd: costUsd };
+    } catch (err) {
+      return fail(record, err);
+    }
+  })();
+  return { active, done };
+}
+
+// Follow-up, part 1: plan charters aimed at what an earlier run didn't cover, then stop for review
+// like full mode. The earlier run's issues become known issues, so they aren't reported again; the
+// new record's config carries them, so "Run again" keeps them too. Part 2 is startExecution.
+// Resolves with no charters (and no saved run) when the planner finds no gap worth a session.
+export function startFollowUpPlanning(prior: RunRecord, report: RunReport, setup: Setup): { active: ActiveRun; done: Promise<PlannedRun> } {
+  const controller = new AbortController();
+  const cfg = withPriorIssues(prior.config, report.issues);
+  const record = newRecord(cfg, "full", { followUpOf: prior.id });
+  const active = activeRun(record, controller);
+  const done = (async () => {
+    await saveRun(record);
+    try {
+      const ctx = context(cfg, record, setup, controller);
+      const siteMapFile = await getFile(prior.id, "sitemap.md");
+      const siteMap = siteMapFile === undefined ? undefined : String(siteMapFile);
+      if (siteMap) await ctx.storage.write("sitemap.md", siteMap);
+      ctx.log("Planning a follow-up of the earlier run…");
+      const label = `the ${prior.name} run of ${prior.createdAt.slice(0, 16).replace("T", " ")} UTC`;
+      const { plan, costUsd } = await createFollowUpPlan(cfg, { label, sessions: report.sessions, issues: report.issues, siteMap }, ctx);
+      if (!plan.charters.length) {
+        await deleteRun(record.id);
+        return { record, plan, reconSignals: [], planCostUsd: costUsd };
+      }
+      await ctx.storage.write("plan.json", JSON.stringify(plan, null, 2));
+      await ctx.storage.write("plan.md", planToMarkdown(plan));
+      const planned = { ...record, plan };
+      await saveRun(planned);
+      return { record: planned, plan, reconSignals: [], planCostUsd: costUsd };
     } catch (err) {
       return fail(record, err);
     }
