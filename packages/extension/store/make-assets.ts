@@ -1,4 +1,4 @@
-// Generates the Chrome Web Store / Edge Add-ons images into store/assets/: five 1280x800
+// Generates the Chrome Web Store / Edge Add-ons images into store/assets/: six 1280x800
 // screenshots, the 440x280 small promo tile and the 1400x560 marquee tile. It drives the real
 // extension against the demo shop in demo.ts, so it needs no key and costs nothing.
 // Run with `npm run store:assets -w @exploratory-agent/extension`.
@@ -125,6 +125,20 @@ try {
   await shoot("screenshot-5-plan.png", {
     title: "Plan sessions like a QA team",
     subtitle: "It maps the site and writes charters. You review and edit them before anything runs.",
+    url: `${HOST}/`,
+    site: await site.screenshot(),
+    panel: await panel.screenshot(),
+  });
+
+  // 6. Follow-up: from History, plan sessions for what the quick check didn't cover.
+  await panel.getByRole("button", { name: "Discard plan" }).click();
+  await panel.getByRole("button", { name: "History" }).click();
+  await panel.getByRole("button", { name: "Run follow-up" }).click();
+  await panel.getByRole("heading", { name: "Review the follow-up plan" }).waitFor({ timeout: 60_000 });
+  await panel.evaluate(() => window.scrollTo(0, 0));
+  await shoot("screenshot-6-follow-up.png", {
+    title: "Follow up on what wasn't covered",
+    subtitle: "One click plans sessions for just the gaps. Bugs already found aren't reported again.",
     url: `${HOST}/`,
     site: await site.screenshot(),
     panel: await panel.screenshot(),

@@ -22,6 +22,8 @@ Exploratory Agent is an AI exploratory tester that lives in your browser's side 
 
 **Plan a session.** For QA teams: the agent maps the site, writes session charters you can review and edit, runs them, and triages everything into one report, with confirmed issues first and uncertain ones flagged for a human to verify.
 
+**Follow up on the gaps.** Every session reports what it covered and what it didn't. When a run leaves gaps, one click plans new sessions aimed only at those gaps, and you review them before anything runs. Bugs the earlier run found aren't reported again, so you can keep following up until the whole charter is covered.
+
 **Reports you can use.** Summary or detailed view in the panel, a full HTML report you can print to PDF, CSV for Jira, Azure DevOps or Linear, Markdown, JSON, and one-click "Copy as issue".
 
 **Safe by default.**
@@ -29,7 +31,7 @@ Exploratory Agent is an AI exploratory tester that lives in your browser's side 
 - The agent can't leave the site you're testing.
 - Logout links are blocked so your session survives.
 - Confirmation dialogs are dismissed automatically.
-- The agent works in its own tab, never yours.
+- The agent works in its own tab, never yours. You can have it run in a private window instead.
 - You confirm you're allowed to test each site.
 
 **Your key, your data.** Bring your own Anthropic API key. You see a cost estimate before every run and set a hard cap per session. The extension has no server: runs, reports and your key stay in your browser, and page content goes only to Anthropic's API.
@@ -70,7 +72,9 @@ Privacy policy: host `store/PRIVACY.md` at a public URL (for example the file's 
 
 `npm run store:assets -w @exploratory-agent/extension` regenerates the images in `store/assets/`, and `npm run store:video -w @exploratory-agent/extension` records the video. Both drive the real extension against a local demo shop (`store/demo.ts`) with a scripted stand-in for the API, so they need no key and cost nothing. The folder is git-ignored: regenerate the files before each store update so they match the release.
 
-- Screenshots (1280x800, upload in this order): `screenshot-1-find-bugs.png`, `screenshot-2-live-run.png`, `screenshot-3-results.png`, `screenshot-4-report.png`, `screenshot-5-plan.png`.
+- Screenshots (1280x800, upload in this order): `screenshot-1-find-bugs.png`, `screenshot-2-live-run.png`, `screenshot-3-results.png`, `screenshot-4-report.png`, `screenshot-5-plan.png`, `screenshot-6-follow-up.png`.
+  - Chrome Web Store takes at most 5: leave out `screenshot-5-plan.png`. The follow-up screenshot shows the same plan review, plus the follow-up.
+  - Edge Add-ons takes up to 10: upload all 6.
 - Small promo tile (440x280): `promo-small-440x280.png`.
 - Marquee promo tile (1400x560, optional, used if the store features the extension): `marquee-1400x560.png`.
 - Demo video (1280x720, about 40 seconds, no audio): `demo.webm`. Upload it to YouTube (public or unlisted), and paste the YouTube URL into the store form.

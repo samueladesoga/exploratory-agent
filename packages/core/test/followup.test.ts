@@ -48,6 +48,19 @@ test("withPriorIssues adds earlier issues to the known issues once", () => {
   assert.equal(withPriorIssues(cfg, [issue]).knownIssues.length, 2);
 });
 
+test("createFollowUpPlan allows one charter per listed gap when a session listed several", async () => {
+  let prompt = "";
+  const runner: AgentRunner = {
+    async run(options) {
+      prompt = options.prompt;
+      await options.tools[0].handler({ overview: "o", charters: [] });
+      return { stopReason: "end_turn", costUsd: 0, turns: 1 };
+    },
+  };
+  await createFollowUpPlan(makeConfig(), { label: "r", sessions: [session("C01", { areasNotCovered: ["Payment", "Phone width", "Help page"] })], issues: [] }, { runner, log: () => {} });
+  assert.match(prompt, /at most 3 charters/);
+});
+
 test("createFollowUpPlan skips the model when nothing was left uncovered", async () => {
   const runner: AgentRunner = { run: () => assert.fail("the planner should not run") };
   const { plan, gaps } = await createFollowUpPlan(makeConfig(), { label: "runs/acme/1", sessions: [session("C01")], issues: [] }, { runner, log: () => {} });

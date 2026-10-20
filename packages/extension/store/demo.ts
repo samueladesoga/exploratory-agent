@@ -138,6 +138,17 @@ async function fakeModel(body: Body): Promise<unknown> {
   if (tools.has("submit_plan")) {
     if (turn > 0) return reply([{ type: "text", text: "Planned." }], "end_turn");
     const charter = (title: string, mission: string, risks: string[], techniques: string[], priority: string) => ({ title, mission, area: title, start_path: "/", risks, techniques, priority });
+    if (JSON.stringify(body.messages[0]).includes("This is a follow-up run")) {
+      return reply([
+        toolUse("submit_plan", {
+          overview: "The quick check covered quantities, the promo code and the Checkout button. These sessions cover what it didn't reach: the cart at phone width and the payment step.",
+          charters: [
+            { ...charter("Cart at phone width", "Explore the cart at a 390x844 viewport to discover layout defects that hide or block the order summary", ["Clipped totals", "Unreachable Checkout button"], ["Phone viewport", "Long product names"], "high"), follows_up: "C01" },
+            { ...charter("Payment step", "Explore the payment page, opened directly, to discover validation and error-handling defects behind the broken Checkout button", ["Card field validation", "Lost cart state"], ["Deep links", "Boundary values"], "medium"), follows_up: "C01" },
+          ],
+        }),
+      ]);
+    }
     return reply([
       toolUse("submit_plan", {
         overview: "The cart page carries the money logic, so the sessions focus on quantities, discounts and the hand-off to checkout.",
@@ -220,7 +231,7 @@ async function fakeModel(body: Body): Promise<unknown> {
         }),
       ]);
     case 9:
-      return reply([toolUse("end_session", { summary: "Tested the cart's quantity, promo code and checkout. The money logic has two validation gaps and checkout is broken.", areas_covered: ["Quantity", "Promo code", "Checkout button"], areas_not_covered: ["Payment, which checkout never reached"] })]);
+      return reply([toolUse("end_session", { summary: "Tested the cart's quantity, promo code and checkout. The money logic has two validation gaps and checkout is broken.", areas_covered: ["Quantity", "Promo code", "Checkout button"], areas_not_covered: ["Payment, which checkout never reached", "The cart at phone width, for lack of steps"] })]);
     default:
       return reply([{ type: "text", text: "Signing off." }], "end_turn");
   }
