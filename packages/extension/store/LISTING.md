@@ -22,6 +22,8 @@ Exploratory Agent is an AI exploratory tester that lives in your browser's side 
 
 **Plan a session.** For QA teams: the agent maps the site, writes session charters you can review and edit, runs them, and triages everything into one report, with confirmed issues first and uncertain ones flagged for a human to verify.
 
+**Follow up on the gaps.** Every session reports what it covered and what it didn't. When a run leaves gaps, one click plans new sessions aimed only at those gaps, and you review them before anything runs. Bugs the earlier run found aren't reported again, so you can keep following up until the whole charter is covered.
+
 **Reports you can use.** Summary or detailed view in the panel, a full HTML report you can print to PDF, CSV for Jira, Azure DevOps or Linear, Markdown, JSON, and one-click "Copy as issue".
 
 **Safe by default.**
@@ -29,7 +31,7 @@ Exploratory Agent is an AI exploratory tester that lives in your browser's side 
 - The agent can't leave the site you're testing.
 - Logout links are blocked so your session survives.
 - Confirmation dialogs are dismissed automatically.
-- The agent works in its own tab, never yours.
+- The agent works in its own tab, never yours. You can have it run in a private window instead.
 - You confirm you're allowed to test each site.
 
 **Your key, your data.** Bring your own Anthropic API key. You see a cost estimate before every run and set a hard cap per session. The extension has no server: runs, reports and your key stay in your browser, and page content goes only to Anthropic's API.
