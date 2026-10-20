@@ -50,6 +50,49 @@ ${siteMap}
 Create exactly ${cfg.run.sessions} charters. Each session has a budget of about ${cfg.run.maxStepsPerSession} browser actions. Then call submit_plan.`;
 }
 
+// One earlier session that left something uncovered, as the follow-up planner sees it.
+export interface GapForPrompt {
+  charter: Charter;
+  stopReason: string;
+  stepsUsed: number;
+  summary?: string;
+  covered: string[];
+  notCovered: string[];
+}
+
+export function followUpPlannerPrompt(cfg: ClientConfig, gaps: GapForPrompt[], maxCharters: number, siteMap?: string): string {
+  const sessions = gaps
+    .map((gap) => {
+      const finished = gap.stopReason === "completed" ? "finished normally" : `did not finish (${gap.stopReason})`;
+      return `### ${gap.charter.id} · ${gap.charter.title}
+Mission: ${gap.charter.mission}
+Start URL: ${gap.charter.startUrl}
+Session ${finished}, ${gap.stepsUsed}/${gap.charter.maxSteps} steps used.
+${gap.summary ? `Tester's summary: ${gap.summary}\n` : ""}Covered:
+${list(gap.covered)}
+Not covered:
+${list(gap.notCovered, gap.stopReason === "completed" ? "(none listed)" : "(the session stopped before reporting; treat any part of the mission not listed as covered as a gap)")}`;
+    })
+    .join("\n\n");
+
+  return `${clientContext(cfg)}
+${siteMap ? `\n## Site map from automated reconnaissance\n${siteMap}\n` : ""}
+## This is a follow-up run
+An earlier run tested this application. The sessions below left parts of their charters uncovered. Defects that run found are listed above under known issues.
+
+${sessions}
+
+## Your task
+Write follow-up charters that target only what was not covered. Rules:
+- Don't repeat ground the earlier sessions already covered.
+- Set follows_up to the id of the earlier charter whose gaps each charter targets.
+- Usually write one charter per earlier charter with gaps. Combine small related gaps into one charter if that makes a better session.
+- Skip gaps that were out of scope, or that the harness safety rules block (for example saving in a read-only environment). They would fail again.
+- Write at most ${maxCharters} charters, highest risk first. If no gap is worth another session, submit an empty list of charters and explain why in the overview.
+
+Each session has a budget of about ${cfg.run.maxStepsPerSession} browser actions. Then call submit_plan.`;
+}
+
 // selectorGuide comes from the browser driver, since each one addresses elements differently.
 export function explorerSystem(cfg: ClientConfig, selectorGuide: string): string {
   const safety: string[] = [];

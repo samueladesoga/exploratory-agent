@@ -1,5 +1,6 @@
 import {
   clientConfigToYaml,
+  coverageGaps,
   estimateSessionCostUsd,
   issueToMarkdown,
   parseClientConfig,
@@ -14,7 +15,7 @@ import {
 } from "@exploratory-agent/core";
 import { deleteRun, getFile, listRuns, type RunRecord } from "./db.js";
 import { INCOGNITO_NOT_ALLOWED } from "./cdp-driver.js";
-import { DEMO_CONFIG, demoLogin, startExecution, startPlanning, startQuickRun, type ActiveRun, type PlannedRun } from "./runs.js";
+import { DEMO_CONFIG, demoLogin, startExecution, startFollowUpPlanning, startPlanning, startQuickRun, type ActiveRun, type PlannedRun } from "./runs.js";
 import { loadSettings, PRESETS, saveSettings, type ModelPreset, type Role, type Settings } from "./settings.js";
 import { TEMPLATES } from "./templates.js";
 import { copy, download, h, lines, pairs, timeAgo, usd } from "./ui.js";
@@ -492,13 +493,36 @@ function runPlanning(cfg: ClientConfig): void {
   const view = liveView(`Planning ${cfg.name}`, cfg.run.maxBudgetUsdPerSession ?? settings.sessionCapUsd);
   show(view.el);
   const { active, done } = startPlanning(cfg, setup(cfg, view));
+  reviewWhenPlanned(active, done, showHome);
+}
+
+// Plans charters for what an earlier run left uncovered, then shows them for review.
+function runFollowUp(record: RunRecord, report: RunReport): void {
+  const cfg = record.config;
+  const view = liveView(`Planning a follow-up of ${cfg.name}`, cfg.run.maxBudgetUsdPerSession ?? settings.sessionCapUsd);
+  show(view.el);
+  const { active, done } = startFollowUpPlanning(record, report, setup(cfg, view));
+  const back = () => showResults(record, report);
+  reviewWhenPlanned(active, done, back, (planned) =>
+    show(
+      nav("test"),
+      h("h2", {}, "Nothing to follow up"),
+      h("p", {}, planned.plan.overview),
+      h("p", { class: "muted" }, `Planning cost ${usd(planned.planCostUsd)}.`),
+      h("button", { class: "secondary", onclick: back }, "Back to results"),
+    ),
+  );
+}
+
+function reviewWhenPlanned(active: ActiveRun, done: Promise<PlannedRun>, onStopped: () => void, onEmpty?: (planned: PlannedRun) => void): void {
   activeRun = active;
   done
     .then((planned) => {
       activeRun = undefined;
       if (active.stopReason) return showRunError(new Error(active.stopReason));
-      if (active.stopped) return showHome();
-      showPlanReview(cfg, planned);
+      if (active.stopped) return onStopped();
+      if (!planned.plan.charters.length && onEmpty) return onEmpty(planned);
+      showPlanReview(planned.record.config, planned);
     })
     .catch((err) => {
       activeRun = undefined;
@@ -536,7 +560,13 @@ function showPlanReview(cfg: ClientConfig, planned: PlannedRun): void {
         h("div", { class: "row" }, include, h("strong", {}, charter.id), h("span", { class: `pill pill-${charter.priority}` }, charter.priority), h("span", { class: "muted truncate" }, charter.area)),
         title,
         mission,
-        h("div", { class: "row" }, h("span", { class: "muted" }, "Steps"), steps, h("span", { class: "muted truncate" }, `starts at ${new URL(charter.startUrl).pathname}`)),
+        h(
+          "div",
+          { class: "row" },
+          h("span", { class: "muted" }, "Steps"),
+          steps,
+          h("span", { class: "muted truncate" }, `starts at ${new URL(charter.startUrl).pathname}${charter.followsUp ? ` · follows up ${charter.followsUp}` : ""}`),
+        ),
       ),
       value: (): Charter | undefined => (include.checked ? { ...charter, title: title.value, mission: mission.value, maxSteps: Number(steps.value) } : undefined),
       include,
@@ -564,8 +594,9 @@ function showPlanReview(cfg: ClientConfig, planned: PlannedRun): void {
   });
 
   show(
-    h("h2", {}, "Review the plan"),
+    h("h2", {}, planned.plan.followUpOf ? "Review the follow-up plan" : "Review the plan"),
     h("p", {}, planned.plan.overview),
+    planned.plan.followUpOf ? h("p", { class: "muted" }, "These charters target what the earlier run didn't cover. Issues it found won't be reported again.") : "",
     h("p", { class: "muted" }, `Planning cost ${usd(planned.planCostUsd)}. Untick charters you don't want, or edit them.`),
     ...rows.map((row) => row.el),
     run,
@@ -618,6 +649,16 @@ function showResults(record: RunRecord, report: RunReport, detailed = settings.r
     h("button", { class: "secondary", onclick: () => download(`${record.name}.yaml`, clientConfigToYaml(record.config), "text/yaml") }, "Export config for the CLI"),
     h("button", { class: "secondary", onclick: () => runAgain(record) }, "Run again"),
   );
+  const gaps = coverageGaps(report.sessions);
+  const followUp =
+    gaps.length > 0 &&
+    h(
+      "section",
+      { class: "card" },
+      h("h3", {}, "Not everything was covered"),
+      h("p", { class: "muted" }, `${gaps.length} of ${report.sessions.length} session${report.sessions.length === 1 ? "" : "s"} left part of ${report.sessions.length === 1 ? "its" : "their"} charter untested. A follow-up plans new sessions for just those gaps. You review them before anything runs.`),
+      h("button", { class: "primary", onclick: () => runFollowUp(record, report) }, `Run follow-up · about ${usd(PLANNING_ESTIMATE_USD)} to plan`),
+    );
 
   const shown = detailed ? report.issues : confirmed.slice(0, 5);
   show(
@@ -635,6 +676,7 @@ function showResults(record: RunRecord, report: RunReport, detailed = settings.r
           h("ul", { class: "autos" }, (detailed ? report.autos : report.autos.slice(0, 3)).map((auto) => h("li", {}, severityBadge(auto.severity), ` ${auto.occurrences}× `, h("code", {}, auto.actual)))),
         ]
       : "",
+    followUp,
     detailed &&
       report.sessions.map((session) =>
         h("details", { class: "session" }, h("summary", {}, `${session.sessionId} · ${session.charter.title} · ${session.stopReason}, ${session.stepsUsed}/${session.charter.maxSteps} steps`), h("p", {}, session.summary ?? "No summary."), session.areasNotCovered.length ? h("p", { class: "muted" }, `Not covered: ${session.areasNotCovered.join("; ")}`) : ""),
@@ -677,7 +719,7 @@ async function showHistory(): Promise<void> {
       h(
         "p",
         { class: "muted" },
-        `${run.mode === "quick" ? "Quick check" : `${run.plan?.charters.length ?? "?"} sessions`} · ${statusLabel[run.status]}`,
+        `${run.mode === "quick" ? "Quick check" : `${run.followUpOf ? "Follow-up, " : ""}${run.plan?.charters.length ?? "?"} sessions`} · ${statusLabel[run.status]}`,
         run.totals ? ` · ${run.totals.confirmed} issues, ${run.totals.toVerify} to verify · ${usd(run.totals.costUsd)}` : "",
       ),
       run.error ? h("p", { class: "muted" }, run.error) : "",
@@ -687,6 +729,7 @@ async function showHistory(): Promise<void> {
         run.totals && h("button", { class: "small", onclick: async () => { const report = await loadReport(run.id); if (report) showResults(run, report); } }, "Results"),
         run.totals && h("button", { class: "small", onclick: () => openReport(run.id) }, "Report"),
         run.plan && h("button", { class: "small", onclick: () => runAgain(run) }, "Run again"),
+        run.totals?.gaps ? h("button", { class: "small", onclick: async () => { const report = await loadReport(run.id); if (report) runFollowUp(run, report); } }, "Run follow-up") : "",
         h("button", { class: "small subtle", onclick: async () => { await deleteRun(run.id); showHistory(); } }, "Delete"),
       ),
     );

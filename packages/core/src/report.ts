@@ -91,6 +91,7 @@ function toMarkdown(report: RunReport): string {
     "",
     `**Application:** ${report.cfg.baseUrl}  `,
     `**Run:** ${report.startedAt} → ${report.endedAt}  `,
+    ...(report.plan.followUpOf ? [`**Follow-up of:** ${report.plan.followUpOf}  `] : []),
     `**Sessions:** ${report.sessions.length} · **Issues:** ${confirmed.length} confirmed, ${toVerify.length} to verify · **Runtime error patterns:** ${report.autos.length}  `,
     `**Estimated model cost:** $${report.totalCostUsd.toFixed(2)}`,
     "",
@@ -147,6 +148,7 @@ function toMarkdown(report: RunReport): string {
       "",
       `*${session.charter.mission}*`,
       "",
+      ...(session.charter.followsUp ? [`Follows up ${session.charter.followsUp} from the earlier run.`, ""] : []),
       `Result: ${session.stopReason}, ${session.stepsUsed}/${session.charter.maxSteps} steps, ${session.findings.length} findings, $${session.costUsd.toFixed(2)}.${session.error ? ` Error: ${session.error}` : ""}`,
       "",
     );
@@ -224,7 +226,7 @@ p{max-width:70ch}ul{margin:6px 0;padding-left:20px}li{margin:4px 0}
 @media(max-width:640px){.ea{grid-template-columns:1fr}.counts{grid-template-columns:repeat(3,1fr)}}
 </style></head><body><main>
 <h1>Exploratory testing report</h1>
-<p class="sub">${escape(report.cfg.name)} · <a href="${escape(report.cfg.baseUrl)}">${escape(report.cfg.baseUrl)}</a> · ${escape(report.startedAt.slice(0, 16).replace("T", " "))} UTC · ${report.sessions.length} sessions</p>
+<p class="sub">${escape(report.cfg.name)} · <a href="${escape(report.cfg.baseUrl)}">${escape(report.cfg.baseUrl)}</a> · ${escape(report.startedAt.slice(0, 16).replace("T", " "))} UTC · ${report.sessions.length} sessions${report.plan.followUpOf ? ` · follow-up of ${escape(report.plan.followUpOf)}` : ""}</p>
 <section class="summary">${ul(report.summary)}</section>
 <div class="counts">${SEVERITIES.map((severity) => {
   const c = counts[severity];
@@ -241,7 +243,7 @@ ${report.autos.length ? `<div class="table"><table><tr><th>ID</th><th>Severity</
 ${report.sessions
   .map(
     (session) => `<div class="session"><h3>${escape(session.sessionId)} · ${escape(session.charter.title)}</h3><p class="meta">${escape(session.charter.mission)}</p>
-<p class="meta">${escape(session.stopReason)} · ${session.stepsUsed}/${session.charter.maxSteps} steps · ${session.findings.length} findings · $${session.costUsd.toFixed(2)}${session.error ? ` · error: ${escape(session.error)}` : ""}</p>
+<p class="meta">${session.charter.followsUp ? `follows up ${escape(session.charter.followsUp)} · ` : ""}${escape(session.stopReason)} · ${session.stepsUsed}/${session.charter.maxSteps} steps · ${session.findings.length} findings · $${session.costUsd.toFixed(2)}${session.error ? ` · error: ${escape(session.error)}` : ""}</p>
 ${session.summary ? prose(session.summary) : ""}${session.areasNotCovered.length ? `<h4>Not covered</h4>${ul(session.areasNotCovered)}` : ""}</div>`,
   )
   .join("\n")}

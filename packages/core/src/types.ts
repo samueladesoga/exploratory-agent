@@ -61,6 +61,8 @@ export interface Charter {
   techniques: string[];
   priority: "high" | "medium" | "low";
   maxSteps: number;
+  // In a follow-up run: the id of the earlier run's charter whose gaps this one targets.
+  followsUp?: string;
 }
 
 export interface TestPlan {
@@ -69,6 +71,8 @@ export interface TestPlan {
   createdAt: string;
   overview: string;
   charters: Charter[];
+  // Set when this plan targets the gaps of an earlier run: where that run's output lives.
+  followUpOf?: string;
 }
 
 export interface ActionLogEntry {
