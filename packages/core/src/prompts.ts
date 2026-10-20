@@ -86,7 +86,7 @@ ${sessions}
 Write follow-up charters that target only what was not covered. Rules:
 - Don't repeat ground the earlier sessions already covered.
 - Set follows_up to the id of the earlier charter whose gaps each charter targets.
-- Usually write one charter per earlier charter with gaps. Combine small related gaps into one charter if that makes a better session.
+- Usually write one charter per earlier charter with gaps. Split unrelated gaps into separate charters, and combine small related ones, when that makes better sessions.
 - Skip gaps that were out of scope, or that the harness safety rules block (for example saving in a read-only environment). They would fail again.
 - Write at most ${maxCharters} charters, highest risk first. If no gap is worth another session, submit an empty list of charters and explain why in the overview.
 

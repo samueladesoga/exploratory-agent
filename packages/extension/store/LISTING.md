@@ -72,7 +72,9 @@ Privacy policy: host `store/PRIVACY.md` at a public URL (for example the file's 
 
 `npm run store:assets -w @exploratory-agent/extension` regenerates the images in `store/assets/`, and `npm run store:video -w @exploratory-agent/extension` records the video. Both drive the real extension against a local demo shop (`store/demo.ts`) with a scripted stand-in for the API, so they need no key and cost nothing. The folder is git-ignored: regenerate the files before each store update so they match the release.
 
-- Screenshots (1280x800, upload in this order): `screenshot-1-find-bugs.png`, `screenshot-2-live-run.png`, `screenshot-3-results.png`, `screenshot-4-report.png`, `screenshot-5-plan.png`.
+- Screenshots (1280x800, upload in this order): `screenshot-1-find-bugs.png`, `screenshot-2-live-run.png`, `screenshot-3-results.png`, `screenshot-4-report.png`, `screenshot-5-plan.png`, `screenshot-6-follow-up.png`.
+  - Chrome Web Store takes at most 5: leave out `screenshot-5-plan.png`. The follow-up screenshot shows the same plan review, plus the follow-up.
+  - Edge Add-ons takes up to 10: upload all 6.
 - Small promo tile (440x280): `promo-small-440x280.png`.
 - Marquee promo tile (1400x560, optional, used if the store features the extension): `marquee-1400x560.png`.
 - Demo video (1280x720, about 40 seconds, no audio): `demo.webm`. Upload it to YouTube (public or unlisted), and paste the YouTube URL into the store form.

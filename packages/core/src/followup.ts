@@ -58,7 +58,9 @@ export async function createFollowUpPlan(
     return { plan: buildPlan(cfg, { overview, charters: [] }, { followUpOf: prior.label }), gaps, costUsd: 0 };
   }
 
-  const limit = Math.max(1, maxCharters ?? gaps.length);
+  // By default, room for one charter per gap session, or per listed gap when a session listed several.
+  const listedGaps = gaps.reduce((sum, gap) => sum + gap.notCovered.length, 0);
+  const limit = Math.max(1, maxCharters ?? Math.max(gaps.length, listedGaps));
 
   let plan: TestPlan | undefined;
   const submitPlan = defineTool("submit_plan", "Submit the follow-up test plan.", FollowUpSubmissionShape, async (submission) => {
