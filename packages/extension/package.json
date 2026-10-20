@@ -1,6 +1,6 @@
 {
   "name": "@exploratory-agent/extension",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "license": "MIT",
   "description": "Chromium extension: exploratory testing of the current site from a side panel",
