@@ -3,6 +3,7 @@ export * from "./config.js";
 export * from "./context.js";
 export * from "./driver.js";
 export * from "./explorer.js";
+export * from "./followup.js";
 export * from "./messages-runner.js";
 export * from "./models.js";
 export * from "./pipeline.js";

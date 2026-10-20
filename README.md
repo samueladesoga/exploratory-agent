@@ -59,7 +59,12 @@ npm run explore -- --client clients/acme.yaml --plan runs/acme/<timestamp>/plan.
 
 # Re-run only some charters, and watch the browser
 npm run explore -- --client clients/acme.yaml --plan <plan.json> --charters C02,C04 --headed --verbose
+
+# Follow up on what an earlier run didn't cover
+npm run explore -- --client clients/acme.yaml --follow-up runs/acme/<timestamp>
 ```
+
+`--follow-up` reads the earlier run's `report.json`, finds sessions that listed areas as not covered or stopped early, and plans new charters aimed only at those gaps. It skips reconnaissance and reuses the earlier site map. Issues the earlier run found are treated as known issues, so they aren't reported again. Each new charter notes which earlier charter it follows up. Combine it with `--plan-only` to review the follow-up charters first, or `--sessions <n>` to cap how many are planned. Follow-ups can be chained: point the next one at the follow-up run.
 
 Each run writes to `runs/<client>/<timestamp>/`:
 
